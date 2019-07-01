@@ -53,6 +53,6 @@ crnn_kwargs = {"n_in_channel": 1, "nclass": len(classes), "attention": True, "n_
                "n_layers_RNN": 2,
                 "activation": "glu",
                 "dropout": 0.5,
-               "kernel_size": 3 * [3], "padding": 3 * [1], "stride": 3 * [1], "nb_filters": [64, 64, 64],
+               "kernel_size": 3 * [3], "padding": 3 * [1], "stride": 3 * [1], "nb_filters": [64, 64, 128],
                 "pooling": list(3 * ((2, 4),))}
 pooling_time_ratio = 8  # 2 * 2 * 2

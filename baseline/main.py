@@ -185,10 +185,7 @@ if __name__ == '__main__':
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
     message = f_args.message
-    """
-    hop_lenght_tmp = f_args.hop_lenght
-    cfg.hop_length = hop_lenght_tmp
-    """
+
     LOG.info("subpart_data = {}".format(reduced_number_of_data))
     LOG.info("Using synthetic data = {}".format(not no_synthetic))
     LOG.info("")

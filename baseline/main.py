@@ -166,6 +166,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
 
 
 if __name__ == '__main__':
+
     LOG.info("MEAN TEACHER")
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("-s", '--subpart_data', type=int, default=None, dest="subpart_data",
@@ -173,12 +174,23 @@ if __name__ == '__main__':
 
     parser.add_argument("-n", '--no_synthetic', dest='no_synthetic', action='store_true', default=False,
                         help="Not using synthetic labels during training")
+
+    parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
+                        help="Message printed on top of logs")
+
+    parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
+                        help="Message printed on top of logs")
+
     f_args = parser.parse_args()
 
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
+    message = f_args.message
     LOG.info("subpart_data = {}".format(reduced_number_of_data))
     LOG.info("Using synthetic data = {}".format(not no_synthetic))
+    LOG.info("")
+    LOG.info("MESSAGE: ".format(message))
+    LOG.info("")
 
     if no_synthetic:
         add_dir_model_name = "_no_synthetic"

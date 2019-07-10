@@ -211,6 +211,7 @@ def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_pr
             LOG.debug(pred_strong)
         pred_strong = ProbabilityEncoder().binarization(pred_strong, binarization_type="global_threshold",
                                                         threshold=0.5)
+        
         pred_strong = scipy.ndimage.filters.median_filter(pred_strong, (cfg.median_window, 1))
         pred = decoder(pred_strong)
         pred = pd.DataFrame(pred, columns=["event_label", "onset", "offset"])

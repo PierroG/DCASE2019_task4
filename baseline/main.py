@@ -178,18 +178,21 @@ if __name__ == '__main__':
     parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
                         help="Message printed on top of logs")
 
-    parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
-                        help="Message printed on top of logs")
+    parser.add_argument("-hl", '--hop_length', dest='hop_length', type=int, default=511,
+                        help="hop length value")
 
     f_args = parser.parse_args()
-
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
     message = f_args.message
+    """
+    hop_lenght_tmp = f_args.hop_lenght
+    cfg.hop_length = hop_lenght_tmp
+    """
     LOG.info("subpart_data = {}".format(reduced_number_of_data))
     LOG.info("Using synthetic data = {}".format(not no_synthetic))
     LOG.info("")
-    LOG.info("MESSAGE: ".format(message))
+    LOG.info("MESSAGE: " + str(message))
     LOG.info("")
 
     if no_synthetic:

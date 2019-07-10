@@ -1,0 +1,13 @@
+0
+
+./runme.sh: line 35: /talc3/multispeech/calcul/users/nturpault/code/Pierre/DCASE2019_task4/baseline/logs/1988901.err: No such file or directory
+rsync: change_dir "/features" failed: No such file or directory (2)
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1196) [sender=3.1.2]
+rsync: change_dir "/tmp/nturpaul/job.1988901//./stored_data" failed: No such file or directory (2)
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1196) [sender=3.1.2]
+4
+0
+
+rsync: change_dir "/features" failed: No such file or directory (2)
+rsync error: some files/attrs were not transferred (see previous errors) (code 23) at main.c(1196) [sender=3.1.2]
+9760

@@ -1,0 +1,26 @@
+0it [00:00, ?it/s]
+0it [00:00, ?it/s]
+0it [00:00, ?it/s]
+/talc3/multispeech/calcul/users/nturpault/softwares/anaconda3/envs/pytorch/lib/python3.6/site-packages/pandas/core/generic.py:4401: SettingWithCopyWarning: 
+A value is trying to be set on a copy of a slice from a DataFrame.
+Try using .loc[row_indexer,col_indexer] = value instead
+
+See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
+  self[name] = value
+0it [00:00, ?it/s]
+/talc3/multispeech/calcul/users/nturpault/softwares/anaconda3/envs/pytorch/lib/python3.6/site-packages/sed_eval/sound_event.py:544: RuntimeWarning: Mean of empty slice
+  'f_measure': float(numpy.nanmean(event_wise_f_measure)),
+/talc3/multispeech/calcul/users/nturpault/softwares/anaconda3/envs/pytorch/lib/python3.6/site-packages/sed_eval/sound_event.py:545: RuntimeWarning: Mean of empty slice
+  'precision': float(numpy.nanmean(event_wise_precision)),
+Traceback (most recent call last):
+  File "main.py", line 367, in <module>
+    test_model(state, reduced_number_of_data, predicitons_fname)
+  File "/tmp/nturpaul/job.1988904/TestModel.py", line 47, in test_model
+    df = dataset.initialize_and_get_df(reference_csv_path, reduced_number_of_data)
+  File "/tmp/nturpaul/job.1988904/DatasetDcase2019Task4.py", line 102, in initialize_and_get_df
+    meta_name = os.path.join(self.local_path, csv_path)
+  File "/talc3/multispeech/calcul/users/nturpault/softwares/anaconda3/envs/pytorch/lib/python3.6/posixpath.py", line 92, in join
+    genericpath._check_arg_types('join', a, *p)
+  File "/talc3/multispeech/calcul/users/nturpault/softwares/anaconda3/envs/pytorch/lib/python3.6/genericpath.py", line 149, in _check_arg_types
+    (funcname, s.__class__.__name__)) from None
+TypeError: join() argument must be str or bytes, not 'NoneType'

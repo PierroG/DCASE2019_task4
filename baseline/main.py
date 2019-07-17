@@ -26,7 +26,7 @@ from evaluation_measures import get_f_measure_by_class, get_predictions, audio_t
 from models.CRNN import CRNN
 import config as cfg
 from utils.utils import ManyHotEncoder, create_folder, SaveBest, to_cuda_if_available, weights_init, \
-    get_transforms, AverageMeterSet
+    get_transforms, AverageMeterSet, EarlyStopping
 from utils.Logger import LOG
 
 
@@ -355,6 +355,7 @@ if __name__ == '__main__':
     }
 
     save_best_cb = SaveBest("sup")
+    early_stopping = EarlyStopping(crnn, 25, val_comp="sup")
 
     # ##############
     # Train
@@ -398,6 +399,8 @@ if __name__ == '__main__':
             if save_best_cb.apply(global_valid):
                 model_fname = os.path.join(saved_model_dir, "baseline_best")
                 torch.save(state, model_fname)
+        if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]):
+            break
 
     if cfg.save_best:
         model_fname = os.path.join(saved_model_dir, "baseline_best")

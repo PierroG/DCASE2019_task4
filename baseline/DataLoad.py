@@ -93,7 +93,7 @@ class DataLoadDf(Dataset):
             Tuple containing the features and the labels (numpy.array, numpy.array)
 
         """
-        print(str(index+1) + "/" + str(self.__len__()))
+
 
         # ratio = itération dans la DF
         ratio = index // (self.__len__() / self.data_multiplier)
@@ -106,9 +106,7 @@ class DataLoadDf(Dataset):
         if len(self.augmentations) > 0:
             # Et qu'on a déja fait la premiére itération
             if ratio > 0:
-                print("Data Augmented")
                 call_augmentation_function = random.choice(self.augmentations)
-                print(call_augmentation_function)
                 features = call_augmentation_function(features)
 
         # event_labels means weak labels, event_label means strong labels

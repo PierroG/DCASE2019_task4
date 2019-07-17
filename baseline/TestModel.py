@@ -50,7 +50,7 @@ def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_pr
 
     predictions = get_predictions(crnn, strong_dataload, many_hot_encoder.decode_strong, pooling_time_ratio,
                                   save_predictions=strore_predicitions_fname)
-    compute_strong_metrics(predictions, df)
+    strong_metric = compute_strong_metrics(predictions, df)
 
     weak_dataload = DataLoadDf(df, dataset.get_feature_file, many_hot_encoder.encode_weak,
                                transform=transforms_valid)
@@ -60,6 +60,7 @@ def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_pr
 
     # Just an example of how to get the weak predictions from dataframes.
     # print(audio_tagging_results(df, predictions))
+    return strong_metric
 
 
 if __name__ == '__main__':

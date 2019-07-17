@@ -6,6 +6,7 @@
 #########################################################################
 
 import argparse
+import json
 import os
 import time
 
@@ -71,6 +72,8 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
     start = time.time()
     rampup_length = len(train_loader) * cfg.n_epoch // 2
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
+        print(i)
+        print(batch_input.shape)
         global_step = epoch * len(train_loader) + i
         if global_step < rampup_length:
             rampup_value = ramps.sigmoid_rampup(global_step, rampup_length)
@@ -178,26 +181,56 @@ if __name__ == '__main__':
     parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
                         help="Message printed on top of logs")
 
-    parser.add_argument("-hl", '--hop_length', dest='hop_length', type=int, default=511,
-                        help="hop length value")
+    parser.add_argument("-ts", '--time_shifting', dest='time_shift', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-ft", '--frequency_trunc', dest='frequency_trunc', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-gn", '--gaussian_noise', dest='gaussian_noise', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-", '--data_multiplier', type=int, default=1, dest="data_multiplier",
+                         help="int Multiplier of dataLoad len.")
 
     f_args = parser.parse_args()
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
+    data_multiplier = f_args.data_multiplier
+
+    time_shifting = f_args.time_shift
+    frequency_trunc=f_args.frequency_trunc
+    gaussian_noise=f_args.gaussian_noise
+
+    augmentations = []
+    suffix_name_aug = ""
+    if time_shifting:
+        augmentations.append(DataLoadDf.time_shift)
+        suffix_name_aug += "_ts"
+    if frequency_trunc:
+        augmentations.append(DataLoadDf.trunc)
+        suffix_name_aug += "_ft"
+    if gaussian_noise:
+        augmentations.append(DataLoadDf.gaussian_noise)
+        suffix_name_aug += "_gn"
     message = f_args.message
 
     LOG.info("subpart_data = {}".format(reduced_number_of_data))
     LOG.info("Using synthetic data = {}".format(not no_synthetic))
-    LOG.info("")
+    LOG.info("-- DATA AUGMENTATION --")
+    LOG.info("Data_multiplier = {}".format(data_multiplier))
+    LOG.info("Time shifting = {}".format(time_shifting))
+    LOG.info("Frequency trunc = {}".format(frequency_trunc))
+    LOG.info("Gaussian noise = {}".format(gaussian_noise))
     LOG.info("MESSAGE: " + str(message))
-    LOG.info("")
 
     if no_synthetic:
         add_dir_model_name = "_no_synthetic"
     else:
         add_dir_model_name = "_with_synthetic"
 
-    store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name)
+    store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name + suffix_name_aug + "_" +
+                             str(data_multiplier))
     saved_model_dir = os.path.join(store_dir, "model")
     saved_pred_dir = os.path.join(store_dir, "predictions")
     create_folder(store_dir)
@@ -240,9 +273,9 @@ if __name__ == '__main__':
     train_synth_df.offset = train_synth_df.offset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
     LOG.debug(valid_synth_df.event_label.value_counts())
 
-    train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+    train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                  transform=transforms)
-    unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+    unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                               transform=transforms)
     train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                   transform=transforms)
@@ -272,6 +305,7 @@ if __name__ == '__main__':
                                       batch_sizes=batch_sizes)
 
     training_data = DataLoader(concat_dataset, batch_sampler=sampler)
+
 
     transforms_valid = get_transforms(cfg.max_frames, scaler=scaler)
     valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
@@ -376,4 +410,11 @@ if __name__ == '__main__':
     # Validation
     # ##############
     predicitons_fname = os.path.join(saved_pred_dir, "baseline_validation.csv")
-    test_model(state, cfg.validation,reduced_number_of_data, predicitons_fname)
+    valid_metric = test_model(state, cfg.validation,reduced_number_of_data, predicitons_fname)
+    with open(os.path.join(store_dir, "results_validation.json"), "w") as f:
+        json.dump(valid_metric.results(), f)
+
+    # with open(os.path.join(store_dir, "results_validation.json"), "r") as f:
+    #     valid_metric_res = json.load(f)
+    # valid_metric_res["class_wise"]
+    # valid_metric_res["class_wise_average"]

@@ -20,8 +20,11 @@ from utils.Logger import LOG
 
 torch.manual_seed(0)
 random.seed(0)
-
-
+'''
+time_shifting=True
+frequency_trunc=True
+gaussian_noise=True
+'''
 class DataLoadDf(Dataset):
     """ Class derived from pytorch Dataset
     Prepare the data to be use in a batch mode
@@ -44,7 +47,8 @@ class DataLoadDf(Dataset):
         transform : function(), function to be applied to the sample (pytorch transformations)
         return_indexes: bool, whether or not to return indexes when use __getitem__
     """
-    def __init__(self, df, get_feature_file_func, encode_function, transform=None,
+
+    def __init__(self, df, get_feature_file_func, encode_function, augmentation_list=[], data_mult=1, transform=None,
                  return_indexes=False):
 
         self.df = df
@@ -53,6 +57,8 @@ class DataLoadDf(Dataset):
         self.transform = transform
         self.return_indexes = return_indexes
         self.filenames = df.filename.drop_duplicates()
+        self.augmentations = augmentation_list
+        self.data_multiplier = data_mult
 
     def set_return_indexes(self, val):
         """ Set the value of self.return_indexes
@@ -68,7 +74,12 @@ class DataLoadDf(Dataset):
             int
                 Length of the object
         """
-        length = len(self.filenames)
+
+        if len(self.augmentations) > 0:
+            length = len(self.filenames) * self.data_multiplier
+        else:
+            length = len(self.filenames)
+
         return length
 
     def get_sample(self, index):
@@ -82,7 +93,23 @@ class DataLoadDf(Dataset):
             Tuple containing the features and the labels (numpy.array, numpy.array)
 
         """
+        print(str(index+1) + "/" + str(self.__len__()))
+
+        # ratio = itération dans la DF
+        ratio = index // (self.__len__() / self.data_multiplier)
+        # Pour ne boucler dans la DF que le nombre que l'on veux
+        if ratio < self.data_multiplier:
+            index = int(index%(self.__len__()/self.data_multiplier))
         features = self.get_feature_file_func(self.filenames.iloc[index])
+
+        # Si on veux de la data augmentation
+        if len(self.augmentations) > 0:
+            # Et qu'on a déja fait la premiére itération
+            if ratio > 0:
+                print("Data Augmented")
+                call_augmentation_function = random.choice(self.augmentations)
+                print(call_augmentation_function)
+                features = call_augmentation_function(features)
 
         # event_labels means weak labels, event_label means strong labels
         if "event_labels" in self.df.columns or {"onset", "offset", "event_label"}.issubset(self.df.columns):
@@ -129,6 +156,7 @@ class DataLoadDf(Dataset):
             Tuple containing the features, the labels and the index (numpy.array, numpy.array, int)
 
         """
+
         sample = self.get_sample(index)
 
         if self.transform:
@@ -153,6 +181,50 @@ class DataLoadDf(Dataset):
         transforms = self.transform.add_transform(transform)
         return DataLoadDf(self.df, self.get_feature_file_func, self.encode_function, transforms, self.return_indexes)
 
+    @staticmethod
+    def time_shift(features):
+        """ Apply a time shift on the data
+
+        Args:
+            features: numpy.array, features to be modified
+        Returns:
+            numpy.ndarray
+            Modified features
+        """
+        shift_value = np.random.randint(features.shape[0] // 3)
+        features_new = np.roll(features, shift_value, axis=0)
+        return features_new
+
+    @staticmethod
+    def trunc(features):
+        """ Apply a frequency trunc on the data
+
+        Args:
+            features: numpy.array, features to be modified
+        Returns:
+            numpy.ndarray
+            Modified features
+        """
+        shift_value = np.random.randint(-10, 11)
+        if shift_value > 0:
+            X_new = np.pad(features, ((0, 0), (shift_value, 0)), mode='constant')[:, shift_value:]
+        else:
+            shift_value = -shift_value
+            X_new = np.pad(features, ((0, 0), (0, shift_value)), mode='constant')[:, shift_value:]
+        return X_new
+
+    @staticmethod
+    def gaussian_noise(features):
+        """Apply gaussian noise on each point of the data
+
+        Args:
+            features: numpy.array, features to be modified
+        Returns:
+            numpy.ndarray
+            Modified features
+        """
+        noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
+        return features + noise
 
 class GaussianNoise:
     """ Apply gaussian noise

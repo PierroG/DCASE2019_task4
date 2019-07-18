@@ -94,7 +94,7 @@ class DataLoadDf(Dataset):
 
         """
 
-
+        print(str(index) +"/" + str(self.__len__()))
         # ratio = itération dans la DF
         ratio = index // (self.__len__() / self.data_multiplier)
         # Pour ne boucler dans la DF que le nombre que l'on veux
@@ -102,17 +102,12 @@ class DataLoadDf(Dataset):
             index = int(index%(self.__len__()/self.data_multiplier))
         features = self.get_feature_file_func(self.filenames.iloc[index])
 
-        # Si on veux de la data augmentation
-        if len(self.augmentations) > 0:
-            # Et qu'on a déja fait la premiére itération
-            if ratio > 0:
-                call_augmentation_function = random.choice(self.augmentations)
-                features = call_augmentation_function(features)
-
+        label_type = None
         # event_labels means weak labels, event_label means strong labels
         if "event_labels" in self.df.columns or {"onset", "offset", "event_label"}.issubset(self.df.columns):
             if "event_labels" in self.df.columns:
                 label = self.df.iloc[index]["event_labels"]
+                label_type = 'weak'
                 if pd.isna(label):
                     label = []
                 if type(label) is str:
@@ -123,9 +118,11 @@ class DataLoadDf(Dataset):
             else:
                 cols = ["onset", "offset", "event_label"]
                 label = self.df[self.df.filename == self.filenames.iloc[index]][cols]
+                label_type = 'strong'
                 if label.empty:
                     label = []
         else:
+            label_type = 'unlabel'
             label = "empty"  # trick to have -1 for unlabeled data and concat them with labeled
             if "filename" not in self.df.columns:
                 raise NotImplementedError(
@@ -139,7 +136,25 @@ class DataLoadDf(Dataset):
             y = self.encode_function(label)
         else:
             y = label
+
+        print(label_type)
+        # Si on veux de la data augmentation
+        if len(self.augmentations) > 0:
+            # Et qu'on a déja fait la premiére itération
+            if ratio > 0:
+                aug = random.choice(self.augmentations)
+                if aug == 'time_shifting':
+                    if label_type == 'strong':
+                        features, y = self.time_shift(features, y)
+                    else:
+                        features = self.time_shift(features)
+                if aug == 'frequency_trunc':
+                    features = self.trunc(features)
+                if aug == 'gaussian_noise':
+                    features = self.gaussian_noise(features)
+
         sample = features, y
+
         return sample
 
     def __getitem__(self, index):
@@ -180,7 +195,7 @@ class DataLoadDf(Dataset):
         return DataLoadDf(self.df, self.get_feature_file_func, self.encode_function, transforms, self.return_indexes)
 
     @staticmethod
-    def time_shift(features):
+    def time_shift(features, label=None):
         """ Apply a time shift on the data
 
         Args:
@@ -189,8 +204,12 @@ class DataLoadDf(Dataset):
             numpy.ndarray
             Modified features
         """
+
         shift_value = int(np.random.normal(0, 90))
         features_new = np.roll(features, shift_value, axis=0)
+        if label is not None:
+            label_new = np.roll(label, shift_value, axis=0)
+            return features_new, label_new
         return features_new
 
     @staticmethod

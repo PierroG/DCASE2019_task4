@@ -72,8 +72,6 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
     start = time.time()
     rampup_length = len(train_loader) * 50# cfg.n_epoch // 2
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
-        print(i)
-        print(batch_input.shape)
         global_step = epoch * len(train_loader) + i
         if global_step < rampup_length:
             rampup_value = ramps.sigmoid_rampup(global_step, rampup_length)
@@ -190,13 +188,26 @@ if __name__ == '__main__':
     parser.add_argument("-gn", '--gaussian_noise', dest='gaussian_noise', action='store_true', default=False,
                         help="using time shifting for data augmentation")
 
-    parser.add_argument("-", '--data_multiplier', type=int, default=1, dest="data_multiplier",
+    parser.add_argument("-wa", '--weak_augmentation', dest='weak_augmentation', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-ua", '--unlabel_augmentation', dest='unlabel_augmentation', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-sa", '--strong_augmentation', dest='strong_augmentation', action='store_true', default=False,
+                        help="using time shifting for data augmentation")
+
+    parser.add_argument("-d", '--data_multiplier', type=int, default=1, dest="data_multiplier",
                          help="int Multiplier of dataLoad len.")
 
     f_args = parser.parse_args()
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
     data_multiplier = f_args.data_multiplier
+
+    weak_augmentation = f_args.weak_augmentation
+    unlabel_augmentation = f_args.unlabel_augmentation
+    strong_augmentation = f_args.strong_augmentation
 
     time_shifting = f_args.time_shift
     frequency_trunc=f_args.frequency_trunc
@@ -205,14 +216,15 @@ if __name__ == '__main__':
     augmentations = []
     suffix_name_aug = ""
     if time_shifting:
-        augmentations.append(DataLoadDf.time_shift)
+        augmentations.append('time_shifting')
         suffix_name_aug += "_ts"
     if frequency_trunc:
-        augmentations.append(DataLoadDf.trunc)
+        augmentations.append('frequency_trunc')
         suffix_name_aug += "_ft"
     if gaussian_noise:
-        augmentations.append(DataLoadDf.gaussian_noise)
+        augmentations.append('gaussian_noise')
         suffix_name_aug += "_gn"
+
     message = f_args.message
 
     LOG.info("subpart_data = {}".format(reduced_number_of_data))
@@ -222,6 +234,10 @@ if __name__ == '__main__':
     LOG.info("Time shifting = {}".format(time_shifting))
     LOG.info("Frequency trunc = {}".format(frequency_trunc))
     LOG.info("Gaussian noise = {}".format(gaussian_noise))
+    LOG.info("--With--")
+    LOG.info("weak data augmentaton = {}".format(weak_augmentation))
+    LOG.info("unlabel data augmentaton = {}".format(unlabel_augmentation))
+    LOG.info("strong data augmentaton = {}".format(strong_augmentation))
     LOG.info("MESSAGE: " + str(message))
 
     if no_synthetic:
@@ -273,12 +289,23 @@ if __name__ == '__main__':
     train_synth_df.offset = train_synth_df.offset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
     LOG.debug(valid_synth_df.event_label.value_counts())
 
-    train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
+    if weak_augmentation:
+        train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                  transform=transforms)
-    unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
+    else:
+        train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
+    if unlabel_augmentation:
+        unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                               transform=transforms)
-    train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+    else:
+        unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
+    if strong_augmentation:
+        train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                   transform=transforms)
+    else:
+        train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                      transform=transforms)
+
 
     if not no_synthetic:
         list_dataset = [train_weak_data, unlabel_data, train_synth_data]

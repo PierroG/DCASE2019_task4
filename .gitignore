@@ -11,7 +11,8 @@ stored_data/
 
 baseline/test/
 
-dataset/audio/
+audio/
+dataset/audio
 dataset/check_files/
 dataset/add_missing_files.py
 baseline/runme*

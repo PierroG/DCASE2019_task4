@@ -70,7 +70,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
 
     LOG.debug("Nb batches: {}".format(len(train_loader)))
     start = time.time()
-    rampup_length = len(train_loader) * cfg.n_epoch // 2
+    rampup_length = len(train_loader) * 50# cfg.n_epoch // 2
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
         print(i)
         print(batch_input.shape)
@@ -355,7 +355,7 @@ if __name__ == '__main__':
     }
 
     save_best_cb = SaveBest("sup")
-    early_stopping = EarlyStopping(crnn, 25, val_comp="sup")
+    early_stopping = EarlyStopping(crnn, 50, val_comp="sup")
 
     # ##############
     # Train
@@ -400,7 +400,8 @@ if __name__ == '__main__':
                 model_fname = os.path.join(saved_model_dir, "baseline_best")
                 torch.save(state, model_fname)
         if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]):
-            break
+            LOG.info("\n\n\nEARLY STOPPING\n\n\n")
+            #break
 
     if cfg.save_best:
         model_fname = os.path.join(saved_model_dir, "baseline_best")

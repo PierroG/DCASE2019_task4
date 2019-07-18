@@ -189,7 +189,7 @@ class DataLoadDf(Dataset):
             numpy.ndarray
             Modified features
         """
-        shift_value = np.random.randint(features.shape[0] // 3)
+        shift_value = int(np.random.normal(0, 90))
         features_new = np.roll(features, shift_value, axis=0)
         return features_new
 

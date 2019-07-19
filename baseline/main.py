@@ -30,6 +30,7 @@ from utils.utils import ManyHotEncoder, create_folder, SaveBest, to_cuda_if_avai
 from utils.Logger import LOG
 
 np.random.seed(5)
+torch.manual_seed(0)
 
 
 def adjust_learning_rate(optimizer, rampup_value, rampdown_value=1.):
@@ -200,7 +201,10 @@ if __name__ == '__main__':
                         help="using time shifting for data augmentation")
 
     parser.add_argument("-d", '--data_multiplier', type=int, default=1, dest="data_multiplier",
-                         help="int Multiplier of dataLoad len.")
+                        help="int Multiplier of dataLoad len.")
+
+    parser.add_argument("-o", '--orange', dest='orange', action='store_true', default=False,
+                        help="Using configuration orange papr dcase 2019")
 
     f_args = parser.parse_args()
     reduced_number_of_data = f_args.subpart_data
@@ -214,6 +218,8 @@ if __name__ == '__main__':
     time_shifting = f_args.time_shift
     frequency_trunc=f_args.frequency_trunc
     gaussian_noise=f_args.gaussian_noise
+
+    orange = f_args.orange
 
     augmentations = []
     suffix_name_aug = ""
@@ -255,7 +261,10 @@ if __name__ == '__main__':
     create_folder(saved_model_dir)
     create_folder(saved_pred_dir)
 
-    pooling_time_ratio = cfg.pooling_time_ratio  # --> Be careful, it depends of the model time axis pooling
+    if orange:
+        pooling_time_ratio = 4
+    else:
+        pooling_time_ratio = cfg.pooling_time_ratio  # --> Be careful, it depends of the model time axis pooling
     # ##############
     # DATA
     # ##############
@@ -287,17 +296,17 @@ if __name__ == '__main__':
 
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
-    train_synth_df.onset = train_synth_df.onset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
-    train_synth_df.offset = train_synth_df.offset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
+    train_synth_df.onset = train_synth_df.onset * dataset.sample_rate // dataset.hop_length // pooling_time_ratio
+    train_synth_df.offset = train_synth_df.offset * dataset.sample_rate // dataset.hop_length // pooling_time_ratio
     LOG.debug(valid_synth_df.event_label.value_counts())
 
     # Normalize
     train_weak_data_norm = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
-                                 transform=transforms)
+                                      transform=transforms)
     unlabel_data_norm = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms)
     train_synth_data_norm = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
-                                  transform=transforms)
+                                       transform=transforms)
     list_dataset_norm = [train_weak_data_norm, unlabel_data_norm]
     if not no_synthetic:
         list_dataset_norm.append(train_synth_data_norm)
@@ -309,17 +318,17 @@ if __name__ == '__main__':
 
     if weak_augmentation:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
-                                 transform=transforms)
+                                     transform=transforms)
     else:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
     if unlabel_augmentation:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
-                              transform=transforms)
+                                  transform=transforms)
     else:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
     if strong_augmentation:
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
-                                  transform=transforms)
+                                      transform=transforms)
     else:
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                       transform=transforms)
@@ -349,7 +358,7 @@ if __name__ == '__main__':
     valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                   transform=transforms_valid)
     valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
-                                  transform=transforms_valid)
+                                 transform=transforms_valid)
 
     # Eval 2018
     eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
@@ -360,7 +369,11 @@ if __name__ == '__main__':
     # Model
     # ##############
     no_load = True
-    init_crnn = "stored_data/init_crnn"
+    if orange:
+        init_crnn = "stored_data/init_crnn_orange"
+    else:
+        init_crnn = "stored_data/init_crnn_baseline"
+
     if os.path.exists(init_crnn):
         try:
             state = torch.load(init_crnn, map_location="cpu")
@@ -377,11 +390,24 @@ if __name__ == '__main__':
         except (RuntimeError, TypeError) as e:
             LOG.warn("Init model couldn't be load, rewritting the file")
     if no_load:
-        crnn_kwargs = cfg.crnn_kwargs
+        if orange:
+            crnn_kwargs = {"n_in_channel": 1, "nclass": len(classes), "attention": True, "n_RNN_cell": 64,
+                           "n_layers_RNN": 2,
+                           "activation": "glu",
+                           "dropout": 0.5,
+                           "kernel_size": 7 * [3], "padding": 7 * [1], "stride": 7 * [1],
+                           "nb_filters": [16, 32, 64, 128, 128, 128, 128],
+                           "pooling": list(((2, 2), (2, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2)))}
+        else:
+            crnn_kwargs = cfg.crnn_kwargs
         crnn = CRNN(**crnn_kwargs)
         crnn_ema = CRNN(**crnn_kwargs)
 
-        optim_kwargs = {"lr": cfg.max_learning_rate, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
+        if orange:
+            max_lr = 0.001
+        else:
+            max_lr = cfg.max_learning_rate
+        optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
         bce_loss = nn.BCELoss()
 

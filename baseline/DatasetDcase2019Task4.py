@@ -73,14 +73,29 @@ class DatasetDcase2019Task4:
 
     """
     def __init__(self, local_path="", base_feature_dir="features", recompute_features=False,
-                 save_log_feature=True):
+                 save_log_feature=True, orange_config=False):
 
         self.local_path = local_path
         self.recompute_features = recompute_features
         self.save_log_feature = save_log_feature
 
-        feature_dir = os.path.join(base_feature_dir, "sr" + str(cfg.sample_rate) + "_win" + str(cfg.n_window)
-                                   + "_hop" + str(cfg.hop_length) + "_mels" + str(cfg.n_mels))
+        if orange_config:
+            self.sample_rate = 22050  # 44100
+            self.hop_length = 365  # 511
+            self.n_window = 2048  # 511
+            self.n_mels = 128  # 64
+            self.f_max = 22050
+            self.f_min = 0
+        else:
+            self.sample_rate = cfg.sample_rate  # 44100
+            self.hop_length = cfg.hop_length  # 511
+            self.n_window = cfg.n_window  # 511
+            self.n_mels = cfg.n_mels  # 64
+            self.f_max = cfg.f_max
+            self.f_min = cfg.f_min
+
+        feature_dir = os.path.join(base_feature_dir, "sr" + str(self.sample_rate) + "_win" + str(self.n_window)
+                                   + "_hop" + str(self.hop_length) + "_mels" + str(self.n_mels))
         if not self.save_log_feature:
             feature_dir += "_nolog"
 
@@ -205,12 +220,12 @@ class DatasetDcase2019Task4:
             containing the mel spectrogram
         """
         # Compute spectrogram
-        ham_win = np.hamming(cfg.n_window)
+        ham_win = np.hamming(self.n_window)
 
         spec = librosa.stft(
             audio,
-            n_fft=cfg.n_window,
-            hop_length=cfg.hop_length,
+            n_fft=self.n_window,
+            hop_length=self.hop_length,
             window=ham_win,
             center=True,
             pad_mode='reflect'
@@ -218,9 +233,9 @@ class DatasetDcase2019Task4:
 
         mel_spec = librosa.feature.melspectrogram(
             S=np.abs(spec),  # amplitude, for energy: spec**2 but don't forget to change amplitude_to_db.
-            sr=cfg.sample_rate,
-            n_mels=cfg.n_mels,
-            fmin=cfg.f_min, fmax=cfg.f_max,
+            sr=self.sample_rate,
+            n_mels=self.n_mels,
+            fmin=self.f_min, fmax=self.f_max,
             htk=False, norm=None)
 
         if self.save_log_feature:
@@ -255,7 +270,7 @@ class DatasetDcase2019Task4:
                     LOG.error("File %s is in the csv file but the feature is not extracted!" % wav_path)
                     df_meta = df_meta.drop(df_meta[df_meta.filename == wav_name].index)
                 else:
-                    (audio, _) = read_audio(wav_path, cfg.sample_rate)
+                    (audio, _) = read_audio(wav_path, self.sample_rate)
                     if audio.shape[0] == 0:
                         print("File %s is corrupted!" % wav_path)
                     else:

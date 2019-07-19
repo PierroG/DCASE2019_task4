@@ -498,9 +498,14 @@ if __name__ == '__main__':
     # Validation
     # ##############
     predicitons_fname = os.path.join(saved_pred_dir, "baseline_validation.csv")
-    valid_metric = test_model(state, cfg.validation,reduced_number_of_data, predicitons_fname)
+
+    valid_metric = test_model(state, cfg.validation, reduced_number_of_data, predicitons_fname)
     with open(os.path.join(store_dir, "results_validation.json"), "w") as f:
         json.dump(valid_metric.results(), f)
+
+    #valid_metric = test_model(state, cfg.validation,reduced_number_of_data, predicitons_fname,
+     #                         store_results=os.path.join(store_dir, "results_validation.json",))
+
 
     # with open(os.path.join(store_dir, "results_validation.json"), "r") as f:
     #     valid_metric_res = json.load(f)

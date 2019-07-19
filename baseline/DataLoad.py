@@ -95,7 +95,6 @@ class DataLoadDf(Dataset):
 
         """
 
-        print(str(index) +"/" + str(self.__len__()))
         # ratio = itération dans la DF
         ratio = index // (self.__len__() / self.data_multiplier)
         # Pour ne boucler dans la DF que le nombre que l'on veux
@@ -138,7 +137,6 @@ class DataLoadDf(Dataset):
         else:
             y = label
 
-        print(label_type)
         # Si on veux de la data augmentation
         if len(self.augmentations) > 0:
             # Et qu'on a déja fait la premiére itération

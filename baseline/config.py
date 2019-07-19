@@ -23,7 +23,7 @@ max_frames = math.ceil(max_len_seconds * sample_rate / hop_length)
 f_min = 0.
 f_max = sample_rate // 2 #22050.
 
-lr = 0.001 #0.0001
+lr = 0.0001 #0.0001
 initial_lr = 0.
 beta1_before_rampdown = 0.9
 beta1_after_rampdown = 0.5

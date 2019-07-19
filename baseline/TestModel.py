@@ -33,7 +33,6 @@ def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_pr
     LOG.info("Model loaded at epoch: {}".format(state["epoch"]))
     pooling_time_ratio = state["pooling_time_ratio"]
 
-    crnn.load(parameters=state["model"]["state_dict"])
     scaler = Scaler()
     scaler.load_state_dict(state["scaler"])
     classes = cfg.classes

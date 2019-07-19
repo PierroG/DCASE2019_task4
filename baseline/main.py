@@ -29,11 +29,13 @@ from utils.utils import ManyHotEncoder, create_folder, SaveBest, to_cuda_if_avai
     get_transforms, AverageMeterSet, EarlyStopping
 from utils.Logger import LOG
 
+np.random.seed(5)
 
-def adjust_learning_rate(optimizer, rampup_value, rampdown_value):
+
+def adjust_learning_rate(optimizer, rampup_value, rampdown_value=1.):
     # LR warm-up to handle large minibatch sizes from https://arxiv.org/abs/1706.02677
     lr = rampup_value * rampdown_value * cfg.max_learning_rate
-    beta1 = rampdown_value * cfg.beta1_before_rampdown + (1. - rampdown_value) * cfg.beta1_after_rampdown
+    beta1 = rampdown_value * cfg.beta1_after_rampdown + (1. - rampdown_value) * cfg.beta1_before_rampdown
     beta2 = (1. - rampup_value) * cfg.beta2_during_rampdup + rampup_value * cfg.beta2_after_rampup
     weight_decay = (1 - rampup_value) * cfg.weight_decay_during_rampup + cfg.weight_decay_after_rampup * rampup_value
 
@@ -70,7 +72,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
 
     LOG.debug("Nb batches: {}".format(len(train_loader)))
     start = time.time()
-    rampup_length = len(train_loader) * 50# cfg.n_epoch // 2
+    rampup_length = len(train_loader) * 50 # cfg.n_epoch // 2
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
         global_step = epoch * len(train_loader) + i
         if global_step < rampup_length:
@@ -79,7 +81,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
             rampup_value = 1.0
 
         # Todo check if this improves the performance
-        # adjust_learning_rate(optimizer, rampup_value, rampdown_value)
+        adjust_learning_rate(optimizer, rampup_value) #, rampdown_value)
         meters.update('lr', optimizer.param_groups[0]['lr'])
 
         [batch_input, ema_batch_input, target] = to_cuda_if_available([batch_input, ema_batch_input, target])
@@ -289,6 +291,22 @@ if __name__ == '__main__':
     train_synth_df.offset = train_synth_df.offset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
     LOG.debug(valid_synth_df.event_label.value_counts())
 
+    # Normalize
+    train_weak_data_norm = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                 transform=transforms)
+    unlabel_data_norm = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                   transform=transforms)
+    train_synth_data_norm = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                  transform=transforms)
+    list_dataset_norm = [train_weak_data_norm, unlabel_data_norm]
+    if not no_synthetic:
+        list_dataset_norm.append(train_synth_data_norm)
+
+    scaler = Scaler()
+    scaler.calculate_scaler(ConcatDataset(list_dataset_norm))
+
+    LOG.debug(scaler.mean_)
+
     if weak_augmentation:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                  transform=transforms)
@@ -306,7 +324,6 @@ if __name__ == '__main__':
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                       transform=transforms)
 
-
     if not no_synthetic:
         list_dataset = [train_weak_data, unlabel_data, train_synth_data]
         batch_sizes = [cfg.batch_size//4, cfg.batch_size//2, cfg.batch_size//4]
@@ -318,11 +335,6 @@ if __name__ == '__main__':
     # Assume weak data is always the first one
     weak_mask = slice(batch_sizes[0])
 
-    scaler = Scaler()
-    scaler.calculate_scaler(ConcatDataset(list_dataset))
-
-    LOG.debug(scaler.mean_)
-
     transforms = get_transforms(cfg.max_frames, scaler, augment_type="noise")
     for i in range(len(list_dataset)):
         list_dataset[i].set_transform(transforms)
@@ -332,7 +344,6 @@ if __name__ == '__main__':
                                       batch_sizes=batch_sizes)
 
     training_data = DataLoader(concat_dataset, batch_sampler=sampler)
-
 
     transforms_valid = get_transforms(cfg.max_frames, scaler=scaler)
     valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
@@ -348,38 +359,58 @@ if __name__ == '__main__':
     # ##############
     # Model
     # ##############
-    crnn_kwargs = cfg.crnn_kwargs
-    crnn = CRNN(**crnn_kwargs)
-    crnn_ema = CRNN(**crnn_kwargs)
+    no_load = True
+    init_crnn = "stored_data/init_crnn"
+    if os.path.exists(init_crnn):
+        try:
+            state = torch.load(init_crnn, map_location="cpu")
+            crnn_kwargs = state["model"]["kwargs"]
+            crnn = CRNN(**crnn_kwargs)
+            crnn.load(parameters=state["model"]["state_dict"])
+            crnn_ema = CRNN(**crnn_kwargs)
+            crnn_ema.load(parameters=state["model_ema"]["state_dict"])
 
-    crnn.apply(weights_init)
-    crnn_ema.apply(weights_init)
+            optim_kwargs = {"lr": cfg.lr, "betas": (0.9, 0.999)}
+            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+            pooling_time_ratio = state["pooling_time_ratio"]
+            no_load = False
+        except (RuntimeError, TypeError) as e:
+            LOG.warn("Init model couldn't be load, rewritting the file")
+    if no_load:
+        crnn_kwargs = cfg.crnn_kwargs
+        crnn = CRNN(**crnn_kwargs)
+        crnn_ema = CRNN(**crnn_kwargs)
+
+        optim_kwargs = {"lr": cfg.max_learning_rate, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+        bce_loss = nn.BCELoss()
+
+        state = {
+            'model': {"name": crnn.__class__.__name__,
+                      'args': '',
+                      "kwargs": crnn_kwargs,
+                      'state_dict': crnn.state_dict()},
+            'model_ema': {"name": crnn_ema.__class__.__name__,
+                          'args': '',
+                          "kwargs": crnn_kwargs,
+                          'state_dict': crnn_ema.state_dict()},
+            'optimizer': {"name": optimizer.__class__.__name__,
+                          'args': '',
+                          "kwargs": optim_kwargs,
+                          'state_dict': optimizer.state_dict()},
+            "pooling_time_ratio": pooling_time_ratio,
+            "scaler": scaler.state_dict(),
+            "many_hot_encoder": many_hot_encoder.state_dict()
+        }
+
+        crnn.apply(weights_init)
+        crnn_ema.apply(weights_init)
+        torch.save(state, init_crnn)
+
     LOG.info(crnn)
 
     for param in crnn_ema.parameters():
         param.detach_()
-
-    optim_kwargs = {"lr": 0.001, "betas": (0.9, 0.999)}
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
-    bce_loss = nn.BCELoss()
-
-    state = {
-        'model': {"name": crnn.__class__.__name__,
-                  'args': '',
-                  "kwargs": crnn_kwargs,
-                  'state_dict': crnn.state_dict()},
-        'model_ema': {"name": crnn_ema.__class__.__name__,
-                      'args': '',
-                      "kwargs": crnn_kwargs,
-                      'state_dict': crnn_ema.state_dict()},
-        'optimizer': {"name": optimizer.__class__.__name__,
-                      'args': '',
-                      "kwargs": optim_kwargs,
-                      'state_dict': optimizer.state_dict()},
-        "pooling_time_ratio": pooling_time_ratio,
-        "scaler": scaler.state_dict(),
-        "many_hot_encoder": many_hot_encoder.state_dict()
-    }
 
     save_best_cb = SaveBest("sup")
     early_stopping = EarlyStopping(crnn, 50, val_comp="sup")

@@ -400,13 +400,15 @@ def get_transforms(frames, scaler=None, add_axis_conv=True, augment_type=None):
     if add_axis_conv:
         unsqueeze_axis = 0
 
+    transf.extend([ApplyLog(), PadOrTrunc(nb_frames=frames)])
+    if scaler is not None:
+        transf.append(Normalize(scaler=scaler))
+
     # Todo, add other augmentations
     if augment_type is not None:
         if augment_type == "noise":
-            transf.append(AugmentGaussianNoise(mean=0., std=0.5))
+            transf.append(AugmentGaussianNoise(mean=0., snr=10))
 
-    transf.extend([ApplyLog(), PadOrTrunc(nb_frames=frames), ToTensor(unsqueeze_axis=unsqueeze_axis)])
-    if scaler is not None:
-        transf.append(Normalize(scaler=scaler))
+    transf.append(ToTensor(unsqueeze_axis=unsqueeze_axis))
 
     return Compose(transf)

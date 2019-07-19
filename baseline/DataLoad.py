@@ -18,6 +18,7 @@ from torch.utils.data.sampler import Sampler
 
 from utils.Logger import LOG
 
+np.random.seed(5)
 torch.manual_seed(0)
 random.seed(0)
 '''
@@ -222,7 +223,7 @@ class DataLoadDf(Dataset):
             numpy.ndarray
             Modified features
         """
-        shift_value = np.random.randint(-10, 11)
+        shift_value = int(np.random.normal(0, 8/3))  # np.random.randint(-10, 11)
         if shift_value > 0:
             X_new = np.pad(features, ((0, 0), (shift_value, 0)), mode='constant')[:, shift_value:]
         else:
@@ -231,7 +232,7 @@ class DataLoadDf(Dataset):
         return X_new
 
     @staticmethod
-    def gaussian_noise(features):
+    def gaussian_noise(features, snr=15):
         """Apply gaussian noise on each point of the data
 
         Args:
@@ -240,39 +241,43 @@ class DataLoadDf(Dataset):
             numpy.ndarray
             Modified features
         """
-        noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
+        std = np.mean(((features - features.mean())/features.std())**2 * 10**(-snr / 10 ), axis=0)
+        noise = np.random.normal(0, std, features.shape) * features.std() + features.mean()
+        noise[noise < 0] = 0
+        # noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
+
         return features + noise
 
-class GaussianNoise:
-    """ Apply gaussian noise
-        Args:
-            mean: float, the mean of the gaussian distribution.
-            std: float, standard deviation of the gaussian distribution.
-        Attributes:
-            mean: float, the mean of the gaussian distribution.
-            std: float, standard deviation of the gaussian distribution.
-        """
-
-    def __init__(self, mean=0, std=0.5):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, sample):
-        """ Apply the transformation
-        Args:
-            sample: tuple or list, a sample defined by a DataLoad class
-
-        Returns:
-            list
-            The transformed tuple
-        """
-        if type(sample) is tuple:
-            sample = list(sample)
-        # sample must be a tuple or a list, not apply on labels
-        for k in range(len(sample) - 1):
-            sample[k] = sample[k] + np.abs(np.random.normal(0, 0.5 ** 2, sample[k].shape))
-
-        return sample
+# class GaussianNoise:
+#     """ Apply gaussian noise
+#         Args:
+#             mean: float, the mean of the gaussian distribution.
+#             std: float, standard deviation of the gaussian distribution.
+#         Attributes:
+#             mean: float, the mean of the gaussian distribution.
+#             std: float, standard deviation of the gaussian distribution.
+#         """
+#
+#     def __init__(self, mean=0, std=0.5):
+#         self.mean = mean
+#         self.std = std
+#
+#     def __call__(self, sample):
+#         """ Apply the transformation
+#         Args:
+#             sample: tuple or list, a sample defined by a DataLoad class
+#
+#         Returns:
+#             list
+#             The transformed tuple
+#         """
+#         if type(sample) is tuple:
+#             sample = list(sample)
+#         # sample must be a tuple or a list, not apply on labels
+#         for k in range(len(sample) - 1):
+#             sample[k] = sample[k] + np.abs(np.random.normal(0, 0.5 ** 2, sample[k].shape))
+#
+#         return sample
 
 
 class ApplyLog(object):
@@ -356,9 +361,26 @@ class AugmentGaussianNoise:
                std: float, std of the Gaussian noise to add
            """
 
-    def __init__(self, mean=0, std=0.5):
+    def __init__(self, mean=0, std=None, snr=None):
         self.mean = mean
         self.std = std
+        self.snr = snr
+
+    @staticmethod
+    def gaussian_noise(features, snr):
+        """Apply gaussian noise on each point of the data
+
+        Args:
+            features: numpy.array, features to be modified
+        Returns:
+            numpy.ndarray
+            Modified features
+        """
+        std = np.mean(features ** 2 * 10 ** (-snr / 10), axis=0)
+        noise = np.random.normal(0, std, features.shape)
+        # noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
+
+        return features + noise
 
     def __call__(self, sample):
         """ Apply the transformation
@@ -369,9 +391,13 @@ class AugmentGaussianNoise:
             list
             The transformed tuple
         """
-        sample, label = sample
-
-        noise = sample + np.abs(np.random.normal(0, 0.5 ** 2, sample.shape))
+        if self.std is not None:
+            noise = sample + np.abs(np.random.normal(0, 0.5 ** 2, sample.shape))
+        elif self.snr is not None:
+            sample, label = sample
+            noise = self.gaussian_noise(sample, self.snr)
+        else:
+            raise NotImplementedError("Neither snr or std has been specified")
 
         return sample, noise, label
 

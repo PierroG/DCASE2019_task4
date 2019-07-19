@@ -16,3 +16,4 @@ dataset/audio
 dataset/check_files/
 dataset/add_missing_files.py
 baseline/runme*
+baseline/logs/

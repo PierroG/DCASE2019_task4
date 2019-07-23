@@ -42,7 +42,7 @@ if orange:
     # Main
     num_workers = 12
     batch_size = 24
-    n_epoch = 200
+    n_epoch = 300
 
     checkpoint_epochs = 1
 

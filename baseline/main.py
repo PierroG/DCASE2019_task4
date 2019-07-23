@@ -82,7 +82,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
             rampup_value = 1.0
 
         # Todo check if this improves the performance
-        adjust_learning_rate(optimizer, rampup_value) #, rampdown_value)
+        #adjust_learning_rate(optimizer, rampup_value) #, rampdown_value)
         meters.update('lr', optimizer.param_groups[0]['lr'])
 
         [batch_input, ema_batch_input, target] = to_cuda_if_available([batch_input, ema_batch_input, target])
@@ -483,9 +483,9 @@ if __name__ == '__main__':
             if save_best_cb.apply(global_valid):
                 model_fname = os.path.join(saved_model_dir, "baseline_best")
                 torch.save(state, model_fname)
-        if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]):
+        if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]) and epoch > 100:
             LOG.info("\n\n\nEARLY STOPPING\n\n\n")
-            #break
+            break
 
     if cfg.save_best:
         model_fname = os.path.join(saved_model_dir, "baseline_best")

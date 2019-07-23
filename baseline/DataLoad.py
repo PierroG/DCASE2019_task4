@@ -240,7 +240,12 @@ class DataLoadDf(Dataset):
             Modified features
         """
         std = np.mean(((features - features.mean())/features.std())**2 * 10**(-snr / 10 ), axis=0)
-        noise = np.random.normal(0, std, features.shape) * features.std() + features.mean()
+        # print(std)
+        try:
+            noise = np.random.normal(0, std, features.shape) * features.std() + features.mean()
+        except Exception as e:
+            print(std)
+            noise = np.zeros(features.shape)
         noise[noise < 0] = 0
         # noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
 
@@ -375,7 +380,10 @@ class AugmentGaussianNoise:
             Modified features
         """
         std = np.mean(features ** 2 * 10 ** (-snr / 10), axis=0)
-        noise = np.random.normal(0, std, features.shape)
+        try:
+            noise = np.random.normal(0, std, features.shape)
+        except Exception as e:
+            print(std)
         # noise = np.abs(np.random.normal(0, 0.5 ** 2, features.shape))
 
         return features + noise

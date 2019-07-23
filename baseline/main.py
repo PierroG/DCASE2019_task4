@@ -308,6 +308,7 @@ if __name__ == '__main__':
     # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=0.8, random_state=26)
     train_synth_df = synthetic_df  #[synthetic_df.filename.isin(filenames_train)]
     # valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
+    valid_synth_df = synthetic_df.drop(synthetic_df.filename.drop_duplicates().sample(frac=0.8, random_state=26).index).reset_index(drop=True)
 
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
@@ -373,6 +374,10 @@ if __name__ == '__main__':
     valid_strong_data = DataLoadDf(valid_strong_df, #valid_synth_df,
                                    dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms_valid)
+    valid_synth_data = DataLoadDf(valid_synth_df,
+                                   dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                   transform=transforms_valid)
+
     valid_weak_data = DataLoadDf(valid_strong_df, # valid_weak_df,
                                  dataset.get_feature_file, many_hot_encoder.encode_weak,
                                  transform=transforms_valid)
@@ -400,8 +405,8 @@ if __name__ == '__main__':
             crnn_ema = CRNN(**crnn_kwargs)
             crnn_ema.load(parameters=state["model_ema"]["state_dict"])
 
-            optim_kwargs = {"lr": cfg.lr, "betas": (0.9, 0.999)}
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+            # optim_kwargs = {"lr": cfg.lr, "betas": (0.9, 0.999)}
+            # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
             pooling_time_ratio = state["pooling_time_ratio"]
             no_load = False
         except (RuntimeError, TypeError) as e:
@@ -419,11 +424,6 @@ if __name__ == '__main__':
             crnn_kwargs = cfg.crnn_kwargs
         crnn = CRNN(**crnn_kwargs)
         crnn_ema = CRNN(**crnn_kwargs)
-        max_lr = 0.001
-
-        optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
-        bce_loss = nn.BCELoss()
 
         state = {
             'model': {"name": crnn.__class__.__name__,
@@ -434,10 +434,6 @@ if __name__ == '__main__':
                           'args': '',
                           "kwargs": crnn_kwargs,
                           'state_dict': crnn_ema.state_dict()},
-            'optimizer': {"name": optimizer.__class__.__name__,
-                          'args': '',
-                          "kwargs": optim_kwargs,
-                          'state_dict': optimizer.state_dict()},
             "pooling_time_ratio": pooling_time_ratio,
             "scaler": scaler.state_dict(),
             "many_hot_encoder": many_hot_encoder.state_dict()
@@ -446,6 +442,16 @@ if __name__ == '__main__':
         crnn.apply(weights_init)
         crnn_ema.apply(weights_init)
         torch.save(state, init_crnn)
+
+    max_lr = 0.001
+
+    optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+    bce_loss = nn.BCELoss()
+    state["optimizer"] = {"name": optimizer.__class__.__name__,
+                          'args': '',
+                          "kwargs": optim_kwargs,
+                          'state_dict': optimizer.state_dict()}
 
     LOG.info(crnn)
 
@@ -468,9 +474,14 @@ if __name__ == '__main__':
 
         crnn = crnn.eval()
         LOG.info("\n ### Valid strong metric (test 2018) ### \n")
-        predictions = get_predictions(crnn, valid_strong_data, many_hot_encoder.decode_strong, pooling_time_ratio,
+        predictions_str = get_predictions(crnn, valid_strong_data, many_hot_encoder.decode_strong, pooling_time_ratio,
                                       save_predictions=None)
-        valid_events_metric = compute_strong_metrics(predictions, valid_strong_df)
+        valid_events_metric = compute_strong_metrics(predictions_str, valid_strong_df)
+
+        LOG.info("\n\n\n ### Valid synth metric (seen during training) ### \n\n\n")
+        predictions_synth = get_predictions(crnn, valid_synth_data, many_hot_encoder.decode_strong, pooling_time_ratio,
+                                      save_predictions=None)
+        compute_strong_metrics(predictions_synth, valid_synth_df)
 
         LOG.info("\n ### Valid weak metric (test 2018) ### \n")
         weak_metric = get_f_measure_by_class(crnn, len(classes),

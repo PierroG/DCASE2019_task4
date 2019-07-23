@@ -4,6 +4,8 @@
 # Copyright Nicolas Turpault, Romain Serizel, Justin Salamon, Ankit Parag Shah, 2019, v1.0
 # This software is distributed under the terms of the License MIT
 #########################################################################
+import json
+
 import scipy
 from dcase_util.data import ProbabilityEncoder
 import sed_eval
@@ -200,7 +202,7 @@ def macro_f_measure(tp, fp, fn):
     return macro_f_score
 
 
-def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_predictions=None):
+def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_predictions=None, orange_windows=False):
     for i, (input, _) in enumerate(valid_dataset):
         [input] = to_cuda_if_available([input])
 
@@ -211,8 +213,12 @@ def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_pr
             LOG.debug(pred_strong)
         pred_strong = ProbabilityEncoder().binarization(pred_strong, binarization_type="global_threshold",
                                                         threshold=0.5)
-        
-        pred_strong = scipy.ndimage.filters.median_filter(pred_strong, (cfg.median_window, 1))
+        if not orange_windows:
+            pred_strong = scipy.ndimage.filters.median_filter(pred_strong, (cfg.median_window, 1))
+        else:
+            pred_strong[:, [0, 3, 4]] = scipy.ndimage.filters.median_filter(pred_strong[:, [0, 3, 4]], (3, 1))
+            pred_strong[:, [1, 2, 8]] = scipy.ndimage.filters.median_filter(pred_strong[:, [1, 2, 8]], (9, 1))
+            pred_strong[:, [5, 6, 7, 9]] = scipy.ndimage.filters.median_filter(pred_strong[:, [5, 6, 7, 9]], (29, 1))
         pred = decoder(pred_strong)
         pred = pd.DataFrame(pred, columns=["event_label", "onset", "offset"])
         pred["filename"] = valid_dataset.filenames.iloc[i]
@@ -232,7 +238,7 @@ def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_pr
     return prediction_df
 
 
-def compute_strong_metrics(predictions, valid_df, pooling_time_ratio=None):
+def compute_strong_metrics(predictions, valid_df, pooling_time_ratio=None, store_results=None):
     if pooling_time_ratio is not None:
         LOG.warning("pooling_time_ratio is deprecated, use it in get_predictions() instead.")
         # In seconds
@@ -244,6 +250,10 @@ def compute_strong_metrics(predictions, valid_df, pooling_time_ratio=None):
     metric_segment = segment_based_evaluation_df(valid_df, predictions, time_resolution=1.)
     LOG.info(metric_event)
     LOG.info(metric_segment)
+
+    if store_results is not None:
+        with open(store_results, "w") as f:
+            json.dump(metric_event.results(), f)
     return metric_event
 
 

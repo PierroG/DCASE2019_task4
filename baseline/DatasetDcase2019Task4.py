@@ -79,20 +79,20 @@ class DatasetDcase2019Task4:
         self.recompute_features = recompute_features
         self.save_log_feature = save_log_feature
 
-        if orange_config:
-            self.sample_rate = 22050  # 44100
-            self.hop_length = 365  # 511
-            self.n_window = 2048  # 511
-            self.n_mels = 128  # 64
-            self.f_max = 22050
-            self.f_min = 0
-        else:
-            self.sample_rate = cfg.sample_rate  # 44100
-            self.hop_length = cfg.hop_length  # 511
-            self.n_window = cfg.n_window  # 511
-            self.n_mels = cfg.n_mels  # 64
-            self.f_max = cfg.f_max
-            self.f_min = cfg.f_min
+        # if orange_config:
+        #     self.sample_rate = 22050  # 44100
+        #     self.hop_length = 365  # 511
+        #     self.n_window = 2048  # 511
+        #     self.n_mels = 128  # 64
+        #     self.f_max = 22050
+        #     self.f_min = 0
+        # else:
+        self.sample_rate = cfg.sample_rate  # 44100
+        self.hop_length = cfg.hop_length  # 511
+        self.n_window = cfg.n_window  # 511
+        self.n_mels = cfg.n_mels  # 64
+        self.f_max = cfg.f_max
+        self.f_min = cfg.f_min
 
         feature_dir = os.path.join(base_feature_dir, "sr" + str(self.sample_rate) + "_win" + str(self.n_window)
                                    + "_hop" + str(self.hop_length) + "_mels" + str(self.n_mels))

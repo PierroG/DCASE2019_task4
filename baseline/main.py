@@ -223,15 +223,25 @@ if __name__ == '__main__':
 
     augmentations = []
     suffix_name_aug = ""
-    if time_shifting:
-        augmentations.append('time_shifting')
-        suffix_name_aug += "_ts"
-    if frequency_trunc:
-        augmentations.append('frequency_trunc')
-        suffix_name_aug += "_ft"
-    if gaussian_noise:
-        augmentations.append('gaussian_noise')
-        suffix_name_aug += "_gn"
+    if time_shifting & frequency_trunc & gaussian_noise:
+        suffix_name_aug += "_all"
+    else:
+        if time_shifting:
+            augmentations.append('time_shifting')
+            suffix_name_aug += "_ts"
+        if frequency_trunc:
+            augmentations.append('frequency_trunc')
+            suffix_name_aug += "_ft"
+        if gaussian_noise:
+            augmentations.append('gaussian_noise')
+            suffix_name_aug += "_gn"
+
+    if weak_augmentation:
+        suffix_name_aug += "_W"
+    if unlabel_augmentation:
+        suffix_name_aug += "_U"
+    if strong_augmentation:
+        suffix_name_aug += "_S"
 
     message = f_args.message
 
@@ -246,14 +256,18 @@ if __name__ == '__main__':
     LOG.info("weak data augmentaton = {}".format(weak_augmentation))
     LOG.info("unlabel data augmentaton = {}".format(unlabel_augmentation))
     LOG.info("strong data augmentaton = {}".format(strong_augmentation))
-    LOG.info("MESSAGE: " + str(message))
+    LOG.info("Param: " + str(suffix_name_aug))
 
-    if no_synthetic:
-        add_dir_model_name = "_no_synthetic"
+    if orange:
+        add_dir_model_name = "orange"
     else:
-        add_dir_model_name = "_with_synthetic"
+        add_dir_model_name = "base"
+    if no_synthetic:
+        add_dir_model_name += "_no_synthetic"
+    else:
+        add_dir_model_name += "_with_synthetic"
 
-    store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name + suffix_name_aug + "_" +
+    store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name + suffix_name_aug + "_x" +
                              str(data_multiplier))
     saved_model_dir = os.path.join(store_dir, "model")
     saved_pred_dir = os.path.join(store_dir, "predictions")
@@ -277,6 +291,7 @@ if __name__ == '__main__':
     # Event if synthetic not used for training, used on validation purpose
     synthetic_df = dataset.initialize_and_get_df(cfg.synthetic, reduced_number_of_data, download=False)
     validation_df = dataset.initialize_and_get_df(cfg.validation, reduced_number_of_data)
+    valid_strong_df = dataset.initialize_and_get_df(cfg.test2018, reduced_number_of_data)
 
     classes = cfg.classes
     many_hot_encoder = ManyHotEncoder(classes, n_frames=cfg.max_frames // pooling_time_ratio)
@@ -284,21 +299,21 @@ if __name__ == '__main__':
     transforms = get_transforms(cfg.max_frames)
 
     # Divide weak in train and valid
-    train_weak_df = weak_df.sample(frac=0.8, random_state=26)
-    valid_weak_df = weak_df.drop(train_weak_df.index).reset_index(drop=True)
-    train_weak_df = train_weak_df.reset_index(drop=True)
-    LOG.debug(valid_weak_df.event_labels.value_counts())
+    train_weak_df = weak_df # .sample(frac=0.8, random_state=26)
+    # valid_weak_df = weak_df.drop(train_weak_df.index).reset_index(drop=True)
+    # train_weak_df = train_weak_df.reset_index(drop=True)
+    # LOG.debug(valid_weak_df.event_labels.value_counts())
 
     # Divide synthetic in train and valid
-    filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=0.8, random_state=26)
-    train_synth_df = synthetic_df[synthetic_df.filename.isin(filenames_train)]
-    valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
+    # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=0.8, random_state=26)
+    train_synth_df = synthetic_df  #[synthetic_df.filename.isin(filenames_train)]
+    # valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
 
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
     train_synth_df.onset = train_synth_df.onset * dataset.sample_rate // dataset.hop_length // pooling_time_ratio
     train_synth_df.offset = train_synth_df.offset * dataset.sample_rate // dataset.hop_length // pooling_time_ratio
-    LOG.debug(valid_synth_df.event_label.value_counts())
+    # LOG.debug(valid_synth_df.event_label.value_counts())
 
     # Normalize
     train_weak_data_norm = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
@@ -355,15 +370,17 @@ if __name__ == '__main__':
     training_data = DataLoader(concat_dataset, batch_sampler=sampler)
 
     transforms_valid = get_transforms(cfg.max_frames, scaler=scaler)
-    valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
-                                  transform=transforms_valid)
-    valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
+    valid_strong_data = DataLoadDf(valid_strong_df, #valid_synth_df,
+                                   dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                   transform=transforms_valid)
+    valid_weak_data = DataLoadDf(valid_strong_df, # valid_weak_df,
+                                 dataset.get_feature_file, many_hot_encoder.encode_weak,
                                  transform=transforms_valid)
 
     # Eval 2018
-    eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
-    eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
-                           transform=transforms_valid)
+    # eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
+    # eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+    #                        transform=transforms_valid)
 
     # ##############
     # Model
@@ -402,11 +419,8 @@ if __name__ == '__main__':
             crnn_kwargs = cfg.crnn_kwargs
         crnn = CRNN(**crnn_kwargs)
         crnn_ema = CRNN(**crnn_kwargs)
+        max_lr = 0.001
 
-        if orange:
-            max_lr = 0.001
-        else:
-            max_lr = cfg.max_learning_rate
         optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
         bce_loss = nn.BCELoss()
@@ -453,12 +467,12 @@ if __name__ == '__main__':
         train(training_data, crnn, optimizer, epoch, ema_model=crnn_ema, weak_mask=weak_mask, strong_mask=strong_mask)
 
         crnn = crnn.eval()
-        LOG.info("\n ### Valid synthetic metric ### \n")
-        predictions = get_predictions(crnn, valid_synth_data, many_hot_encoder.decode_strong, pooling_time_ratio,
+        LOG.info("\n ### Valid strong metric (test 2018) ### \n")
+        predictions = get_predictions(crnn, valid_strong_data, many_hot_encoder.decode_strong, pooling_time_ratio,
                                       save_predictions=None)
-        valid_events_metric = compute_strong_metrics(predictions, valid_synth_df)
+        valid_events_metric = compute_strong_metrics(predictions, valid_strong_df)
 
-        LOG.info("\n ### Valid weak metric ### \n")
+        LOG.info("\n ### Valid weak metric (test 2018) ### \n")
         weak_metric = get_f_measure_by_class(crnn, len(classes),
                                              DataLoader(valid_weak_data, batch_size=cfg.batch_size))
 

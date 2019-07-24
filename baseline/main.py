@@ -508,7 +508,7 @@ if __name__ == '__main__':
             if save_best_cb.apply(global_valid):
                 model_fname = os.path.join(saved_model_dir, "baseline_best")
                 torch.save(state, model_fname)
-        if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]) and epoch > 100:
+        if early_stopping.apply(valid_events_metric.results()["class_wise_average"]["f_measure"]["f_measure"]) and epoch > 150:
             LOG.info("\n\n\nEARLY STOPPING\n\n\n")
             break
 

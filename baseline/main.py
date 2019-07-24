@@ -115,7 +115,9 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
 
         # Strong BCE loss
         if strong_mask is not None:
+            print(strong_mask)
             strong_class_loss = class_criterion(strong_pred[strong_mask], target[strong_mask])
+            print(strong_class_loss)
             meters.update('Strong loss', strong_class_loss.item())
 
             strong_ema_class_loss = class_criterion(strong_pred_ema[strong_mask], target[strong_mask])
@@ -225,6 +227,9 @@ if __name__ == '__main__':
     suffix_name_aug = ""
     if time_shifting & frequency_trunc & gaussian_noise:
         suffix_name_aug += "_all"
+        augmentations.append('time_shifting')
+        augmentations.append('frequency_trunc')
+        augmentations.append('gaussian_noise')
     else:
         if time_shifting:
             augmentations.append('time_shifting')
@@ -335,28 +340,64 @@ if __name__ == '__main__':
     if weak_augmentation:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                      transform=transforms)
+        ratio_weak = data_multiplier
     else:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
+        ratio_weak = 1
     if unlabel_augmentation:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                   transform=transforms)
+        ratio_unlabel = data_multiplier
     else:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
+        ratio_unlabel = 0.5
     if strong_augmentation:
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                       transform=transforms)
+        ratio_strong = data_multiplier
     else:
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                       transform=transforms)
+        ratio_strong = 1
 
     if not no_synthetic:
+
         list_dataset = [train_weak_data, unlabel_data, train_synth_data]
-        batch_sizes = [cfg.batch_size//4, cfg.batch_size//2, cfg.batch_size//4]
-        strong_mask = slice(cfg.batch_size//4 + cfg.batch_size//2, cfg.batch_size)
+
+        batch_sizes = [cfg.batch_size // 4, cfg.batch_size // 2, cfg.batch_size // 4]
+
+        strong_mask = slice(cfg.batch_size // 4 + cfg.batch_size // 2, cfg.batch_size)
+
     else:
+
         list_dataset = [train_weak_data, unlabel_data]
+
         batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
+
         strong_mask = None
+    # if not ratio_unlabel == 0:
+    #     if not no_synthetic:
+    #         list_dataset = [train_weak_data, unlabel_data, train_synth_data]
+    #         batch_sizes = [int(cfg.batch_size*((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak)))),
+    #                        int(cfg.batch_size*ratio_unlabel),
+    #                        int(cfg.batch_size*((1-ratio_unlabel)*ratio_strong/(ratio_strong+ratio_weak)))]
+    #         strong_mask = slice(-batch_sizes[-1], cfg.batch_size)
+    #         print(((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak))))
+    #         print(((1-ratio_unlabel)*(ratio_strong+ratio_weak)))
+    #     else:
+    #         list_dataset = [train_weak_data, unlabel_data]
+    #         batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
+    #         strong_mask = None
+    # else:
+    #     if not no_synthetic:
+    #         list_dataset = [train_weak_data, train_synth_data]
+    #         batch_sizes = [cfg.batch_size//2, cfg.batch_size//2]
+    #         strong_mask = slice(-batch_sizes[-1], cfg.batch_size)
+    #     else:
+    #         list_dataset = [train_weak_data]
+    #         batch_sizes = [cfg.batch_size // 4]
+    #         strong_mask = None
+
     # Assume weak data is always the first one
     weak_mask = slice(batch_sizes[0])
 

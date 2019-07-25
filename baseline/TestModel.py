@@ -5,6 +5,7 @@
 # This software is distributed under the terms of the License MIT
 #########################################################################
 import argparse
+import json
 import os
 import torch
 from torch.utils.data import DataLoader
@@ -22,7 +23,7 @@ from models.CRNN import CRNN
 import config as cfg
 
 
-def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_predicitions_fname=None):
+def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_predicitions_fname=None, store_results=None, orange_windows=False):
     dataset = DatasetDcase2019Task4(os.path.join(cfg.workspace),
                                     base_feature_dir=os.path.join(cfg.workspace, "dataset", "features"),
                                     save_log_feature=False)
@@ -48,8 +49,8 @@ def test_model(state, reference_csv_path, reduced_number_of_data=None, strore_pr
                                  transform=transforms_valid)
 
     predictions = get_predictions(crnn, strong_dataload, many_hot_encoder.decode_strong, pooling_time_ratio,
-                                  save_predictions=strore_predicitions_fname)
-    strong_metric = compute_strong_metrics(predictions, df)
+                                  save_predictions=strore_predicitions_fname, orange_windows=orange_windows)
+    strong_metric = compute_strong_metrics(predictions, df, store_results=store_results)
 
     weak_dataload = DataLoadDf(df, dataset.get_feature_file, many_hot_encoder.encode_weak,
                                transform=transforms_valid)

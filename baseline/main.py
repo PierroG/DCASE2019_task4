@@ -30,7 +30,7 @@ from utils.utils import ManyHotEncoder, create_folder, SaveBest, to_cuda_if_avai
 from utils.Logger import LOG
 
 np.random.seed(5)
-
+torch.manual_seed(0)
 
 def adjust_learning_rate(optimizer, rampup_value, rampdown_value=1.):
     # LR warm-up to handle large minibatch sizes from https://arxiv.org/abs/1706.02677
@@ -81,7 +81,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
             rampup_value = 1.0
 
         # Todo check if this improves the performance
-        adjust_learning_rate(optimizer, rampup_value) #, rampdown_value)
+        # adjust_learning_rate(optimizer, rampup_value) #, rampdown_value)
         meters.update('lr', optimizer.param_groups[0]['lr'])
 
         [batch_input, ema_batch_input, target] = to_cuda_if_available([batch_input, ema_batch_input, target])
@@ -175,8 +175,11 @@ if __name__ == '__main__':
     parser.add_argument("-s", '--subpart_data', type=int, default=None, dest="subpart_data",
                         help="Number of files to be used. Useful when testing on small number of files.")
 
-    parser.add_argument("-n", '--no_synthetic', dest='no_synthetic', action='store_true', default=False,
+    parser.add_argument("-ns", '--no_synthetic', dest='no_synthetic', action='store_true', default=False,
                         help="Not using synthetic labels during training")
+
+    parser.add_argument("-nw", '--no_weak', dest='no_weak', action='store_true', default=False,
+                        help="Not using weak label during training")
 
     parser.add_argument("-m", '--message', dest='message', type=str, default="No Message",
                         help="Message printed on top of logs")
@@ -205,6 +208,7 @@ if __name__ == '__main__':
     f_args = parser.parse_args()
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
+    no_weak = f_args.no_weak
     data_multiplier = f_args.data_multiplier
 
     weak_augmentation = f_args.weak_augmentation
@@ -242,10 +246,12 @@ if __name__ == '__main__':
     LOG.info("strong data augmentaton = {}".format(strong_augmentation))
     LOG.info("MESSAGE: " + str(message))
 
-    if no_synthetic:
+    if no_synthetic and no_weak:
+        add_dir_model_name = "_no_synthetic_no_weak"
+    elif no_synthetic:
         add_dir_model_name = "_no_synthetic"
-    else:
-        add_dir_model_name = "_with_synthetic"
+    elif no_weak:
+        add_dir_model_name = "_no_weak"
 
     store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name + suffix_name_aug + "_" +
                              str(data_multiplier))
@@ -274,22 +280,39 @@ if __name__ == '__main__':
 
     transforms = get_transforms(cfg.max_frames)
 
+    if no_synthetic and no_weak:
+        frac_synth = 0
+        frac_weak = 0
+    elif no_synthetic and not no_weak:
+        frac_synth = 0
+        frac_weak = 1
+    elif no_weak and not no_synthetic:
+        frac_weak = 0
+        frac_synth = 1
+    else:
+        frac_weak = 0.5
+        frac_synth = 0.5
+
     # Divide weak in train and valid
-    train_weak_df = weak_df.sample(frac=0.8, random_state=26)
-    valid_weak_df = weak_df.drop(train_weak_df.index).reset_index(drop=True)
+
+    train_weak_df = weak_df.sample(frac=frac_weak, random_state=26)
+    # valid_weak_df = weak_df.drop(train_weak_df.index).reset_index(drop=True)
     train_weak_df = train_weak_df.reset_index(drop=True)
-    LOG.debug(valid_weak_df.event_labels.value_counts())
+    # LOG.debug(valid_weak_df.event_labels.value_counts())
 
     # Divide synthetic in train and valid
-    filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=0.8, random_state=26)
+    valid_synth_df = synthetic_df.filename.drop_duplicates().sample(n=470, random_state=26)
+    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=1578).reset_index(drop=True)
+    filenames_train = filenames_train.sample(frac=frac_synth).reset_index(drop=True)
+    # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=frac_synth, random_state=26)
     train_synth_df = synthetic_df[synthetic_df.filename.isin(filenames_train)]
-    valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
+    # valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
 
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
     train_synth_df.onset = train_synth_df.onset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
     train_synth_df.offset = train_synth_df.offset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
-    LOG.debug(valid_synth_df.event_label.value_counts())
+    # LOG.debug(valid_synth_df.event_label.value_counts())
 
     # Normalize
     train_weak_data_norm = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
@@ -298,9 +321,12 @@ if __name__ == '__main__':
                                    transform=transforms)
     train_synth_data_norm = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                   transform=transforms)
-    list_dataset_norm = [train_weak_data_norm, unlabel_data_norm]
+    list_dataset_norm = [unlabel_data_norm]
     if not no_synthetic:
         list_dataset_norm.append(train_synth_data_norm)
+    if not no_weak:
+        list_dataset_norm.append(train_weak_data_norm)
+
 
     scaler = Scaler()
     scaler.calculate_scaler(ConcatDataset(list_dataset_norm))
@@ -324,16 +350,32 @@ if __name__ == '__main__':
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                       transform=transforms)
 
+
     if not no_synthetic:
-        list_dataset = [train_weak_data, unlabel_data, train_synth_data]
-        batch_sizes = [cfg.batch_size//4, cfg.batch_size//2, cfg.batch_size//4]
-        strong_mask = slice(cfg.batch_size//4 + cfg.batch_size//2, cfg.batch_size)
+        if not no_weak:
+            list_dataset = [train_weak_data, unlabel_data, train_synth_data]
+            batch_sizes = [cfg.batch_size//4, cfg.batch_size//2, cfg.batch_size//4]
+            strong_mask = slice(cfg.batch_size//4 + cfg.batch_size//2, cfg.batch_size)
+        else:
+            list_dataset = [unlabel_data, train_synth_data]
+            batch_sizes = [cfg.batch_size // 2, cfg.batch_size // 2]
+            strong_mask = slice(cfg.batch_size // 2, cfg.batch_size)
+            weak_mask = None
     else:
-        list_dataset = [train_weak_data, unlabel_data]
-        batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
-        strong_mask = None
+        if not no_weak:
+            list_dataset = [train_weak_data, unlabel_data]
+            batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
+            strong_mask = None
+        else:
+            list_dataset = [unlabel_data]
+            batch_sizes = [cfg.batch_size]
+            strong_mask = None
+            weak_mask = None
+
+
+
     # Assume weak data is always the first one
-    weak_mask = slice(batch_sizes[0])
+    # weak_mask = slice(batch_sizes[0])
 
     transforms = get_transforms(cfg.max_frames, scaler, augment_type="noise")
     for i in range(len(list_dataset)):
@@ -348,13 +390,17 @@ if __name__ == '__main__':
     transforms_valid = get_transforms(cfg.max_frames, scaler=scaler)
     valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                   transform=transforms_valid)
-    valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
-                                  transform=transforms_valid)
+
 
     # Eval 2018
     eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
     eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                            transform=transforms_valid)
+    valid_weak_df = eval_2018_df.sample(n=450)
+    valid_weak_df = valid_weak_df.reset_index(drop=True)
+
+    valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
+                                 transform=transforms_valid)
 
     # ##############
     # Model

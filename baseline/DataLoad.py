@@ -80,7 +80,6 @@ class DataLoadDf(Dataset):
             length = len(self.filenames) * self.data_multiplier
         else:
             length = len(self.filenames)
-
         return length
 
     def get_sample(self, index):
@@ -94,12 +93,12 @@ class DataLoadDf(Dataset):
             Tuple containing the features and the labels (numpy.array, numpy.array)
 
         """
-
+        print(str(index) + " / " + str(self.__len__()))
         # ratio = itération dans la DF
-        ratio = index // (self.__len__() / self.data_multiplier)
+        ratio = index // (len(self.filenames))
         # Pour ne boucler dans la DF que le nombre que l'on veux
-        if ratio < self.data_multiplier:
-            index = int(index%(self.__len__()/self.data_multiplier))
+        if ratio > 0:
+            index = int(index%(len(self.filenames)))
         features = self.get_feature_file_func(self.filenames.iloc[index])
 
         label_type = None
@@ -143,14 +142,17 @@ class DataLoadDf(Dataset):
             if ratio > 0:
                 aug = random.choice(self.augmentations)
                 if aug == 'time_shifting':
+                    print("Do time shift")
                     if label_type == 'strong':
                         features, y = self.time_shift(features, y)
                     else:
                         features = self.time_shift(features)
                 if aug == 'frequency_trunc':
+                    print("Do freq trunc")
                     features = self.trunc(features)
                 if aug == 'gaussian_noise':
                     features = self.gaussian_noise(features)
+                    print("Do gaussian noise")
 
         sample = features, y
 
@@ -168,7 +170,8 @@ class DataLoadDf(Dataset):
             Tuple containing the features, the labels and the index (numpy.array, numpy.array, int)
 
         """
-
+        if index >= self.__len__():
+            raise StopIteration("Out of bounds")
         sample = self.get_sample(index)
 
         if self.transform:
@@ -397,10 +400,10 @@ class AugmentGaussianNoise:
             list
             The transformed tuple
         """
+        sample, label = sample
         if self.std is not None:
             noise = sample + np.abs(np.random.normal(0, 0.5 ** 2, sample.shape))
         elif self.snr is not None:
-            sample, label = sample
             noise = self.gaussian_noise(sample, self.snr)
         else:
             raise NotImplementedError("Neither snr or std has been specified")

@@ -221,6 +221,8 @@ def get_predictions(model, valid_dataset, decoder, pooling_time_ratio=1, save_pr
             pred_strong[:, [5, 6, 7, 9]] = scipy.ndimage.filters.median_filter(pred_strong[:, [5, 6, 7, 9]], (29, 1))
         pred = decoder(pred_strong)
         pred = pd.DataFrame(pred, columns=["event_label", "onset", "offset"])
+        print(i)
+        print(len(valid_dataset))
         pred["filename"] = valid_dataset.filenames.iloc[i]
         if i == 0:
             LOG.debug("predictions: \n{}".format(pred))

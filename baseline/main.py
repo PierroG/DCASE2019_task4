@@ -74,7 +74,10 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
     LOG.debug("Nb batches: {}".format(len(train_loader)))
     start = time.time()
     rampup_length = len(train_loader) * 50 # cfg.n_epoch // 2
+    cnt = 0
+    cmpt = 0
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
+        cmpt + 1
         global_step = epoch * len(train_loader) + i
         if global_step < rampup_length:
             rampup_value = ramps.sigmoid_rampup(global_step, rampup_length)
@@ -115,9 +118,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
 
         # Strong BCE loss
         if strong_mask is not None:
-            print(strong_mask)
             strong_class_loss = class_criterion(strong_pred[strong_mask], target[strong_mask])
-            print(strong_class_loss)
             meters.update('Strong loss', strong_class_loss.item())
 
             strong_ema_class_loss = class_criterion(strong_pred_ema[strong_mask], target[strong_mask])
@@ -149,6 +150,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
                 loss += consistency_loss_weak
             else:
                 loss = consistency_loss_weak
+        cnt += len(batch_input)
 
         assert not (np.isnan(loss.item()) or loss.item() > 1e5), 'Loss explosion: {}'.format(loss.item())
         assert not loss.item() < 0, 'Loss problem, cannot be negative'
@@ -162,6 +164,8 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
         if ema_model is not None:
             update_ema_variables(model, ema_model, 0.999, global_step)
 
+
+    LOG.info("counter nb data: {}".format(cnt))
     epoch_time = time.time() - start
 
     LOG.info(
@@ -205,6 +209,9 @@ if __name__ == '__main__':
     parser.add_argument("-d", '--data_multiplier', type=int, default=1, dest="data_multiplier",
                         help="int Multiplier of dataLoad len.")
 
+    parser.add_argument("-ur", '--unlabel_ratio', type=float, default=0.5, dest="unlabel_ratio",
+                        help="unlabel data ratio for batch")
+
     parser.add_argument("-o", '--orange', dest='orange', action='store_true', default=False,
                         help="Using configuration orange papr dcase 2019")
 
@@ -212,6 +219,8 @@ if __name__ == '__main__':
     reduced_number_of_data = f_args.subpart_data
     no_synthetic = f_args.no_synthetic
     data_multiplier = f_args.data_multiplier
+
+    unlabel_ratio = f_args.unlabel_ratio
 
     weak_augmentation = f_args.weak_augmentation
     unlabel_augmentation = f_args.unlabel_augmentation
@@ -336,7 +345,6 @@ if __name__ == '__main__':
     scaler.calculate_scaler(ConcatDataset(list_dataset_norm))
 
     LOG.debug(scaler.mean_)
-
     if weak_augmentation:
         train_weak_data = DataLoadDf(train_weak_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                      transform=transforms)
@@ -347,10 +355,9 @@ if __name__ == '__main__':
     if unlabel_augmentation:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                   transform=transforms)
-        ratio_unlabel = data_multiplier
+        #ratio_unlabel = data_multiplier
     else:
         unlabel_data = DataLoadDf(unlabel_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, transform=transforms)
-        ratio_unlabel = 0.5
     if strong_augmentation:
         train_synth_data = DataLoadDf(train_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df, augmentations, data_multiplier,
                                       transform=transforms)
@@ -360,43 +367,31 @@ if __name__ == '__main__':
                                       transform=transforms)
         ratio_strong = 1
 
-    if not no_synthetic:
-
-        list_dataset = [train_weak_data, unlabel_data, train_synth_data]
-
-        batch_sizes = [cfg.batch_size // 4, cfg.batch_size // 2, cfg.batch_size // 4]
-
-        strong_mask = slice(cfg.batch_size // 4 + cfg.batch_size // 2, cfg.batch_size)
-
+    ratio_unlabel = unlabel_ratio
+    if not ratio_unlabel == 0:
+        if not no_synthetic:
+            list_dataset = [train_weak_data, unlabel_data, train_synth_data]
+            batch_sizes = [round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_weak / (ratio_strong + ratio_weak))),
+                           round(cfg.batch_size * ratio_unlabel),
+                           round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_strong / (ratio_strong + ratio_weak)))]
+            strong_mask = slice(-batch_sizes[-1], sum(batch_sizes))
+            print(((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak))))
+            print(((1-ratio_unlabel)*(ratio_strong/(ratio_strong+ratio_weak))))
+        else:
+            list_dataset = [train_weak_data, unlabel_data]
+            batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
+            strong_mask = None
     else:
-
-        list_dataset = [train_weak_data, unlabel_data]
-
-        batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
-
-        strong_mask = None
-    # if not ratio_unlabel == 0:
-    #     if not no_synthetic:
-    #         list_dataset = [train_weak_data, unlabel_data, train_synth_data]
-    #         batch_sizes = [int(cfg.batch_size*((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak)))),
-    #                        int(cfg.batch_size*ratio_unlabel),
-    #                        int(cfg.batch_size*((1-ratio_unlabel)*ratio_strong/(ratio_strong+ratio_weak)))]
-    #         strong_mask = slice(-batch_sizes[-1], cfg.batch_size)
-    #         print(((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak))))
-    #         print(((1-ratio_unlabel)*(ratio_strong+ratio_weak)))
-    #     else:
-    #         list_dataset = [train_weak_data, unlabel_data]
-    #         batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
-    #         strong_mask = None
-    # else:
-    #     if not no_synthetic:
-    #         list_dataset = [train_weak_data, train_synth_data]
-    #         batch_sizes = [cfg.batch_size//2, cfg.batch_size//2]
-    #         strong_mask = slice(-batch_sizes[-1], cfg.batch_size)
-    #     else:
-    #         list_dataset = [train_weak_data]
-    #         batch_sizes = [cfg.batch_size // 4]
-    #         strong_mask = None
+        if not no_synthetic:
+            list_dataset = [train_weak_data, train_synth_data]
+            # batch_sizes = [cfg.batch_size//2, cfg.batch_size//2]
+            batch_sizes = [round(cfg.batch_size * ratio_weak / (ratio_strong + ratio_weak)),
+                           round(cfg.batch_size * ratio_strong / (ratio_strong + ratio_weak))]
+            strong_mask = slice(-batch_sizes[-1], cfg.batch_size)
+        else:
+            list_dataset = [train_weak_data]
+            batch_sizes = [cfg.batch_size // 4]
+            strong_mask = None
 
     # Assume weak data is always the first one
     weak_mask = slice(batch_sizes[0])
@@ -415,6 +410,12 @@ if __name__ == '__main__':
     valid_strong_data = DataLoadDf(valid_strong_df, #valid_synth_df,
                                    dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms_valid)
+    print("len")
+    print(len(valid_strong_data))
+    for i, j in enumerate(valid_strong_data):
+        print("new")
+        print(i)
+        print(valid_strong_data.filenames.iloc[i])
     valid_synth_data = DataLoadDf(valid_synth_df,
                                    dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms_valid)
@@ -486,8 +487,9 @@ if __name__ == '__main__':
 
     max_lr = 0.001
 
-    optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_after_rampdown, cfg.beta2_after_rampup)}
+    optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_before_rampdown, cfg.beta2_after_rampup)}
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+    LOG.info(optimizer)
     bce_loss = nn.BCELoss()
     state["optimizer"] = {"name": optimizer.__class__.__name__,
                           'args': '',
@@ -568,6 +570,9 @@ if __name__ == '__main__':
     valid_metric = test_model(state, cfg.validation, reduced_number_of_data, predicitons_fname)
     with open(os.path.join(store_dir, "results_validation.json"), "w") as f:
         json.dump(valid_metric.results(), f)
+
+    LOG.info("\n\n\n\n\n\n\n With Median windows orange \n\n\n\n\n\n")
+    valid_metric = test_model(state, cfg.validation, reduced_number_of_data, predicitons_fname, orange_windows=True)
 
     #valid_metric = test_model(state, cfg.validation,reduced_number_of_data, predicitons_fname,
      #                         store_results=os.path.join(store_dir, "results_validation.json",))

@@ -375,8 +375,8 @@ if __name__ == '__main__':
                            round(cfg.batch_size * ratio_unlabel),
                            round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_strong / (ratio_strong + ratio_weak)))]
             strong_mask = slice(-batch_sizes[-1], sum(batch_sizes))
-            print(((1-ratio_unlabel)*(ratio_weak/(ratio_strong+ratio_weak))))
-            print(((1-ratio_unlabel)*(ratio_strong/(ratio_strong+ratio_weak))))
+            print(round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_weak / (ratio_strong + ratio_weak))))
+            print(round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_strong / (ratio_strong + ratio_weak))))
         else:
             list_dataset = [train_weak_data, unlabel_data]
             batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
@@ -410,12 +410,12 @@ if __name__ == '__main__':
     valid_strong_data = DataLoadDf(valid_strong_df, #valid_synth_df,
                                    dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms_valid)
-    print("len")
-    print(len(valid_strong_data))
-    for i, j in enumerate(valid_strong_data):
-        print("new")
-        print(i)
-        print(valid_strong_data.filenames.iloc[i])
+    # print("len")
+    # print(len(valid_strong_data))
+    # for i, j in enumerate(valid_strong_data):
+    #     print("new")
+    #     print(i)
+    #     print(valid_strong_data.filenames.iloc[i])
     valid_synth_data = DataLoadDf(valid_synth_df,
                                    dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                                    transform=transforms_valid)

@@ -93,7 +93,7 @@ class DataLoadDf(Dataset):
             Tuple containing the features and the labels (numpy.array, numpy.array)
 
         """
-        print(str(index) + " / " + str(self.__len__()))
+
         # ratio = itération dans la DF
         ratio = index // (len(self.filenames))
         # Pour ne boucler dans la DF que le nombre que l'on veux

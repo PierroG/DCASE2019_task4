@@ -142,17 +142,17 @@ class DataLoadDf(Dataset):
             if ratio > 0:
                 aug = random.choice(self.augmentations)
                 if aug == 'time_shifting':
-                    print("Do time shift")
+                    # print("Do time shift")
                     if label_type == 'strong':
                         features, y = self.time_shift(features, y)
                     else:
                         features = self.time_shift(features)
                 if aug == 'frequency_trunc':
-                    print("Do freq trunc")
+                    # print("Do freq trunc")
                     features = self.trunc(features)
                 if aug == 'gaussian_noise':
                     features = self.gaussian_noise(features)
-                    print("Do gaussian noise")
+                    # print("Do gaussian noise")
 
         sample = features, y
 
@@ -207,7 +207,7 @@ class DataLoadDf(Dataset):
             Modified features
         """
 
-        shift_value = int(np.random.normal(0, 90))
+        shift_value = int(np.random.normal(0, 120))
         features_new = np.roll(features, shift_value, axis=0)
         if label is not None and len(label.shape) == 2:
             label_new = np.roll(label, shift_value, axis=0)
@@ -243,6 +243,9 @@ class DataLoadDf(Dataset):
             Modified features
         """
         std = np.mean(((features - features.mean())/features.std())**2 * 10**(-snr / 10 ), axis=0)
+        coef = np.random.uniform(0,1)
+        std = std * coef
+
         # print(std)
         try:
             noise = np.random.normal(0, std, features.shape) * features.std() + features.mean()

@@ -77,7 +77,7 @@ def train(train_loader, model, optimizer, epoch, ema_model=None, weak_mask=None,
     cnt = 0
     cmpt = 0
     for i, (batch_input, ema_batch_input, target) in enumerate(train_loader):
-        cmpt + 1
+        cmpt = cmpt + 1
         global_step = epoch * len(train_loader) + i
         if global_step < rampup_length:
             rampup_value = ramps.sigmoid_rampup(global_step, rampup_length)
@@ -375,8 +375,6 @@ if __name__ == '__main__':
                            round(cfg.batch_size * ratio_unlabel),
                            round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_strong / (ratio_strong + ratio_weak)))]
             strong_mask = slice(-batch_sizes[-1], sum(batch_sizes))
-            print(round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_weak / (ratio_strong + ratio_weak))))
-            print(round(cfg.batch_size * (1 - ratio_unlabel) * (ratio_strong / (ratio_strong + ratio_weak))))
         else:
             list_dataset = [train_weak_data, unlabel_data]
             batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]

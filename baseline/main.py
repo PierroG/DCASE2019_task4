@@ -301,8 +301,8 @@ if __name__ == '__main__':
     # LOG.debug(valid_weak_df.event_labels.value_counts())
 
     # Divide synthetic in train and valid
-    valid_synth_df = synthetic_df.filename.drop_duplicates().sample(n=470, random_state=26)
-    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=1578).reset_index(drop=True)
+    valid_synth_df = synthetic_df.filename.drop_duplicates().sample(n=10, random_state=26)
+    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=10).reset_index(drop=True)
     filenames_train = filenames_train.sample(frac=frac_synth).reset_index(drop=True)
     # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=frac_synth, random_state=26)
     train_synth_df = synthetic_df[synthetic_df.filename.isin(filenames_train)]
@@ -389,14 +389,14 @@ if __name__ == '__main__':
 
     transforms_valid = get_transforms(cfg.max_frames, scaler=scaler)
     valid_synth_data = DataLoadDf(valid_synth_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
-                                  transform=transforms_valid)
+                                   transform=transforms_valid)
 
 
     # Eval 2018
     eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
     eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                            transform=transforms_valid)
-    valid_weak_df = eval_2018_df.sample(n=450)
+    valid_weak_df = eval_2018_df.sample(n=10)
     valid_weak_df = valid_weak_df.reset_index(drop=True)
 
     valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,

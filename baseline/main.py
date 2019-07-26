@@ -252,6 +252,8 @@ if __name__ == '__main__':
         add_dir_model_name = "_no_synthetic"
     elif no_weak:
         add_dir_model_name = "_no_weak"
+    else:
+        add_dir_model_name = "_with_synth&weak"
 
     store_dir = os.path.join("stored_data", "MeanTeacher" + add_dir_model_name + suffix_name_aug + "_" +
                              str(data_multiplier))
@@ -301,7 +303,7 @@ if __name__ == '__main__':
     # LOG.debug(valid_weak_df.event_labels.value_counts())
 
     # Divide synthetic in train and valid
-    valid_synth_df = synthetic_df.filename.drop_duplicates().sample(n=10, random_state=26)
+    valid_synth_df = synthetic_df.loc[synthetic_df.filename.drop_duplicates().sample(n=10, random_state=26)]
     filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=10).reset_index(drop=True)
     filenames_train = filenames_train.sample(frac=frac_synth).reset_index(drop=True)
     # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=frac_synth, random_state=26)

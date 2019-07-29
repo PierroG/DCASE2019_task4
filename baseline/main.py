@@ -303,13 +303,13 @@ if __name__ == '__main__':
     # LOG.debug(valid_weak_df.event_labels.value_counts())
 
     # Divide synthetic in train and valid
-    valid_synth_df = synthetic_df.loc[synthetic_df.filename.drop_duplicates().sample(n=10, random_state=26)]
-    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=10).reset_index(drop=True)
+    valid_synth_df = synthetic_df.loc[synthetic_df.filename.drop_duplicates().sample(n=470, random_state=26).index]
+    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=1578).reset_index(drop=True)
     filenames_train = filenames_train.sample(frac=frac_synth).reset_index(drop=True)
     # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=frac_synth, random_state=26)
     train_synth_df = synthetic_df[synthetic_df.filename.isin(filenames_train)]
     # valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
-
+    LOG.info("size valid synth df : {}".format(valid_synth_df.shape))
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
     train_synth_df.onset = train_synth_df.onset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
@@ -358,6 +358,7 @@ if __name__ == '__main__':
             list_dataset = [train_weak_data, unlabel_data, train_synth_data]
             batch_sizes = [cfg.batch_size//4, cfg.batch_size//2, cfg.batch_size//4]
             strong_mask = slice(cfg.batch_size//4 + cfg.batch_size//2, cfg.batch_size)
+            weak_mask = slice(batch_sizes[0])
         else:
             list_dataset = [unlabel_data, train_synth_data]
             batch_sizes = [cfg.batch_size // 2, cfg.batch_size // 2]
@@ -368,6 +369,7 @@ if __name__ == '__main__':
             list_dataset = [train_weak_data, unlabel_data]
             batch_sizes = [cfg.batch_size // 4, 3 * cfg.batch_size // 4]
             strong_mask = None
+            weak_mask = slice(batch_sizes[0])
         else:
             list_dataset = [unlabel_data]
             batch_sizes = [cfg.batch_size]
@@ -398,7 +400,7 @@ if __name__ == '__main__':
     eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
     eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                            transform=transforms_valid)
-    valid_weak_df = eval_2018_df.sample(n=10)
+    valid_weak_df = eval_2018_df.sample(n=500)
     valid_weak_df = valid_weak_df.reset_index(drop=True)
 
     valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
@@ -409,21 +411,21 @@ if __name__ == '__main__':
     # ##############
     no_load = True
     init_crnn = "stored_data/init_crnn"
-    if os.path.exists(init_crnn):
-        try:
-            state = torch.load(init_crnn, map_location="cpu")
-            crnn_kwargs = state["model"]["kwargs"]
-            crnn = CRNN(**crnn_kwargs)
-            crnn.load(parameters=state["model"]["state_dict"])
-            crnn_ema = CRNN(**crnn_kwargs)
-            crnn_ema.load(parameters=state["model_ema"]["state_dict"])
-
-            optim_kwargs = {"lr": cfg.lr, "betas": (0.9, 0.999)}
-            optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
-            pooling_time_ratio = state["pooling_time_ratio"]
-            no_load = False
-        except (RuntimeError, TypeError) as e:
-            LOG.warn("Init model couldn't be load, rewritting the file")
+    # if os.path.exists(init_crnn):
+    #     try:
+    #         state = torch.load(init_crnn, map_location="cpu")
+    #         crnn_kwargs = state["model"]["kwargs"]
+    #         crnn = CRNN(**crnn_kwargs)
+    #         crnn.load(parameters=state["model"]["state_dict"])
+    #         crnn_ema = CRNN(**crnn_kwargs)
+    #         crnn_ema.load(parameters=state["model_ema"]["state_dict"])
+    #
+    #         optim_kwargs = {"lr": cfg.lr, "betas": (0.9, 0.999)}
+    #         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, crnn.parameters()), **optim_kwargs)
+    #         pooling_time_ratio = state["pooling_time_ratio"]
+    #         no_load = False
+    #     except (RuntimeError, TypeError) as e:
+    #         LOG.warn("Init model couldn't be load, rewritting the file")
     if no_load:
         crnn_kwargs = cfg.crnn_kwargs
         crnn = CRNN(**crnn_kwargs)

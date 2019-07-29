@@ -475,14 +475,14 @@ if __name__ == '__main__':
                           "kwargs": crnn_kwargs,
                           'state_dict': crnn_ema.state_dict()},
             "pooling_time_ratio": pooling_time_ratio,
-            "scaler": scaler.state_dict(),
             "many_hot_encoder": many_hot_encoder.state_dict()
         }
 
         crnn.apply(weights_init)
         crnn_ema.apply(weights_init)
         torch.save(state, init_crnn)
-
+    
+    state["scaler"] = scaler.state_dict()
     max_lr = 0.001
 
     optim_kwargs = {"lr": max_lr, "betas": (cfg.beta1_before_rampdown, cfg.beta2_after_rampup)}

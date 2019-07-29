@@ -77,6 +77,7 @@ if __name__ == '__main__':
     model_path = f_args.model_path
     expe_state = torch.load(model_path, map_location="cpu")
 
+    test_model(expe_state, cfg.test2018, reduced_number_of_data)
     test_model(expe_state, cfg.eval2018, reduced_number_of_data)
     test_model(expe_state, cfg.validation, reduced_number_of_data, "validation2019_predictions.csv")
 

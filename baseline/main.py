@@ -304,12 +304,18 @@ if __name__ == '__main__':
 
     # Divide synthetic in train and valid
     valid_synth_df = synthetic_df.loc[synthetic_df.filename.drop_duplicates().sample(n=470, random_state=26).index]
-    filenames_train = synthetic_df.drop(valid_synth_df.index).sample(n=1578).reset_index(drop=True)
+    filenames_train = synthetic_df.drop(valid_synth_df.index).filename.drop_duplicates().sample(n=1578).reset_index(drop=True)
+    print(filenames_train.shape)
     filenames_train = filenames_train.sample(frac=frac_synth).reset_index(drop=True)
+    print(filenames_train.shape)
+
     # filenames_train = synthetic_df.filename.drop_duplicates().sample(frac=frac_synth, random_state=26)
     train_synth_df = synthetic_df[synthetic_df.filename.isin(filenames_train)]
+
     # valid_synth_df = synthetic_df.drop(train_synth_df.index).reset_index(drop=True)
     LOG.info("size valid synth df : {}".format(valid_synth_df.shape))
+    LOG.info("size train synth df : {}".format(train_synth_df.shape))
+    LOG.info("size train synth df : {}".format(train_synth_df.filename.unique().shape))
     # Put train_synth in frames so many_hot_encoder can work.
     #  Not doing it for valid, because not using labels (when prediction) and event based metric expect sec.
     train_synth_df.onset = train_synth_df.onset * cfg.sample_rate // cfg.hop_length // pooling_time_ratio
@@ -400,12 +406,18 @@ if __name__ == '__main__':
     eval_2018_df = dataset.initialize_and_get_df(cfg.eval2018, reduced_number_of_data)
     eval_2018 = DataLoadDf(eval_2018_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
                            transform=transforms_valid)
-    valid_weak_df = eval_2018_df.sample(n=500)
-    valid_weak_df = valid_weak_df.reset_index(drop=True)
 
-    valid_weak_data = DataLoadDf(valid_weak_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
+    valid_strong_df = eval_2018_df.loc[eval_2018_df.filename.drop_duplicates().sample(n=500).index]
+    valid_strong_df = valid_strong_df.reset_index(drop=True)
+
+    valid_weak_data = DataLoadDf(valid_strong_df, dataset.get_feature_file, many_hot_encoder.encode_weak,
                                  transform=transforms_valid)
+    valid_strong_data = DataLoadDf(valid_strong_df, dataset.get_feature_file, many_hot_encoder.encode_strong_df,
+                                   transform=transforms_valid)
 
+    LOG.info("size train weak df : {}".format(train_weak_df.shape))
+    LOG.info("size valid weak : {}".format(len(valid_weak_data)))
+    LOG.info("size valid strong : {}".format(len(valid_strong_data)))
     # ##############
     # Model
     # ##############
@@ -478,9 +490,14 @@ if __name__ == '__main__':
 
         crnn = crnn.eval()
         LOG.info("\n ### Valid synthetic metric ### \n")
-        predictions = get_predictions(crnn, valid_synth_data, many_hot_encoder.decode_strong, pooling_time_ratio,
+        predictions_synth = get_predictions(crnn, valid_synth_data, many_hot_encoder.decode_strong, pooling_time_ratio,
                                       save_predictions=None)
-        valid_events_metric = compute_strong_metrics(predictions, valid_synth_df)
+        valid_events_metric_synth = compute_strong_metrics(predictions_synth, valid_synth_df)
+
+        LOG.info("\n ### Valid strong metric ### \n")
+        predictions = get_predictions(crnn, valid_strong_data, many_hot_encoder.decode_strong, pooling_time_ratio,
+                                      save_predictions=None)
+        valid_events_metric = compute_strong_metrics(predictions, valid_strong_df)
 
         LOG.info("\n ### Valid weak metric ### \n")
         weak_metric = get_f_measure_by_class(crnn, len(classes),

@@ -481,7 +481,6 @@ if __name__ == '__main__':
         crnn.apply(weights_init)
         crnn_ema.apply(weights_init)
         torch.save(state, init_crnn)
-    
     state["scaler"] = scaler.state_dict()
     max_lr = 0.001
 

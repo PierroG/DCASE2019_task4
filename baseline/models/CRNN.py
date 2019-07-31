@@ -45,16 +45,16 @@ class CRNN(nn.Module):
         self.cnn.load(parameters=parameters["cnn"])
         self.rnn.load_state_dict(parameters["rnn"])
         self.dense.load_state_dict(parameters["dense"])
-        if self.attention:
-            self.dense_softmax.load_state_dict(parameters["dense_softmax"])
+        #if self.attention:
+        #    self.dense_softmax.load_state_dict(parameters["dense_softmax"])
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
         state_dict = {"cnn": self.cnn.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
                       "rnn": self.rnn.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars),
                       'dense': self.dense.state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)}
-        if self.attention:
-            state_dict["dense_softmax"] = self.dense_softmax.state_dict(destination=destination, prefix=prefix,
-                                                                        keep_vars=keep_vars)
+        #if self.attention:
+        #    state_dict["dense_softmax"] = self.dense_softmax.state_dict(destination=destination, prefix=prefix,
+        #                                                                keep_vars=keep_vars)
         return state_dict
 
     def save(self, filename):

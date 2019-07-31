@@ -210,7 +210,7 @@ class DataLoadDf(Dataset):
         shift_value = int(np.random.normal(0, 120))
         features_new = np.roll(features, shift_value, axis=0)
         if label is not None and len(label.shape) == 2:
-            label_new = np.roll(label, shift_value, axis=0)
+            label_new = np.roll(label, round(shift_value / features.shape[0] * label.shape[0]), axis=0)
             return features_new, label_new
         return features_new
 
